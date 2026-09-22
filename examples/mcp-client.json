@@ -1,0 +1,26 @@
+# Example MCP client config (Streamable HTTP)
+
+This server speaks MCP over Streamable HTTP, not stdio — the same URL works
+whether the client is on the same machine as the server or elsewhere on the
+LAN. Point any MCP client that supports an HTTP/URL server entry at:
+
+```
+http://<host>:8420/mcp
+```
+
+`<host>` is `localhost` when the client runs on the same machine as the
+indexer/server, or the Mac Mini's LAN hostname/IP (e.g. `peters-mac-mini.local`
+or `192.168.1.50`) otherwise.
+
+```json
+{
+  "mcpServers": {
+    "resmed-data": {
+      "url": "http://peters-mac-mini.local:8420/mcp"
+    }
+  }
+}
+```
+
+There is no authentication — this is meant to run on a trusted home LAN
+only. Don't expose port 8420 to the internet.

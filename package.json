@@ -1,0 +1,67 @@
+{
+  "name": "resmed-data-mcp",
+  "version": "0.1.0",
+  "description": "Mac Mini indexer + MCP server: archives raw ResMed AirSense CPAP data from a FlashAir-enabled SD card into SQLite, queryable over the LAN by any MCP client",
+  "type": "module",
+  "main": "dist/cli.js",
+  "bin": {
+    "resmed-data-mcp": "./bin/resmed-data-mcp.js"
+  },
+  "author": "Peter Coates",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sfls1397/ResMed-Data-MCP.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sfls1397/ResMed-Data-MCP/issues"
+  },
+  "homepage": "https://github.com/sfls1397/ResMed-Data-MCP#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "resmed",
+    "airsense",
+    "cpap",
+    "flashair",
+    "sqlite",
+    "quantified-self",
+    "macos"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "examples/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "tsc",
+    "start": "node dist/cli.js",
+    "indexer": "node dist/cli.js indexer",
+    "serve": "node dist/cli.js serve",
+    "backfill": "node dist/cli.js backfill",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  }
+}

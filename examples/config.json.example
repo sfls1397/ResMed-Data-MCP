@@ -1,0 +1,6 @@
+{
+  "flashAirBaseUrl": "http://192.168.68.50",
+  "pollInterval": "5m",
+  "serverHost": "0.0.0.0",
+  "serverPort": 8420
+}
