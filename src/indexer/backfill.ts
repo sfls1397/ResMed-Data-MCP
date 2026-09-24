@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { FlashAirClient } from "../flashair/client.js";
 import { isDirectory } from "../flashair/types.js";
 import { ingestEdfFile } from "../db/ingest.js";
+import { CURRENT_INGEST_VERSION } from "../db/ingest.js";
 
 export interface SyncResult {
   filesScanned: number;
@@ -80,7 +81,7 @@ async function syncDeviceIdentification(
   }
 }
 
-/** Skip re-downloading a DATALOG file whose size and FlashAir mtime already match what's stored. */
+/** Skip re-downloading a DATALOG file whose metadata and ingest format match what's stored. */
 function isUnchanged(
   db: DatabaseSync,
   remotePath: string,
@@ -88,12 +89,12 @@ function isUnchanged(
   modifiedAt: string | null
 ): boolean {
   const row = db
-    .prepare(`SELECT size_bytes, flashair_modified_at FROM source_files WHERE remote_path = ?`)
-    .get(remotePath) as { size_bytes: number; flashair_modified_at: string | null } | undefined;
+    .prepare(`SELECT size_bytes, flashair_modified_at, ingest_version FROM source_files WHERE remote_path = ?`)
+    .get(remotePath) as { size_bytes: number; flashair_modified_at: string | null; ingest_version: number } | undefined;
   if (!row) {
     return false;
   }
-  return row.size_bytes === sizeBytes && row.flashair_modified_at === modifiedAt;
+  return row.size_bytes === sizeBytes && row.flashair_modified_at === modifiedAt && row.ingest_version === CURRENT_INGEST_VERSION;
 }
 
 export async function syncOnce(
