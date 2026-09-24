@@ -91,4 +91,8 @@ describe("parseEdf", () => {
     // SigB: digital -500..500 -> physical -50..50, so 100 -> 10.
     expect(digitalToPhysical(parsed.signals[1].header, 100)).toBeCloseTo(10);
   });
+
+  it("rejects a file with a truncated data record", () => {
+    expect(() => parseEdf(buf.subarray(0, -1))).toThrow(/truncated/);
+  });
 });

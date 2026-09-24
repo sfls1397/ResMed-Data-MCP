@@ -2,6 +2,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { FlashAirClient } from "../flashair/client.js";
 import { createSyncLock } from "../lock.js";
 import { syncOnce } from "./backfill.js";
+import type { SyncResult } from "./backfill.js";
 import type { ResolvedConfig } from "../config.js";
 
 export interface RunIndexerDaemonOptions {
@@ -37,12 +38,12 @@ export async function runSyncCycle(
   db: DatabaseSync,
   config: ResolvedConfig,
   log: (msg: string) => void
-): Promise<void> {
+): Promise<SyncResult> {
   const syncRunId = startSyncRun(db);
   const client = new FlashAirClient({ baseUrl: config.flashAirBaseUrl });
   try {
     const result = await syncOnce(db, client, syncRunId, log);
-    const status = result.errors.length > 0 && result.filesIngested === 0 ? "error" : "ok";
+    const status = result.errors.length > 0 ? "error" : "ok";
     finishSyncRun(
       db,
       syncRunId,
@@ -54,10 +55,12 @@ export async function runSyncCycle(
     log(
       `Sync cycle done: scanned=${result.filesScanned} ingested=${result.filesIngested} skipped=${result.filesSkipped} errors=${result.errors.length}`
     );
+    return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     finishSyncRun(db, syncRunId, "error", 0, 0, message);
     log(`Sync cycle failed: ${message}`);
+    return { filesScanned: 0, filesIngested: 0, filesSkipped: 0, errors: [message] };
   }
 }
 

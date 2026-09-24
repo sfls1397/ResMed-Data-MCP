@@ -106,6 +106,11 @@ export function parseEdf(buf: Buffer): ParsedEdf {
     throw new Error(`Implausible signal count in EDF header: ${ns}`);
   }
 
+  const minimumHeaderBytes = 256 + ns * 256;
+  if (!Number.isSafeInteger(header.headerBytes) || header.headerBytes < minimumHeaderBytes || header.headerBytes > buf.length) {
+    throw new Error(`Invalid EDF header length: ${header.headerBytes}`);
+  }
+
   let offset = 256;
   const labels = readAsciiArray(buf, offset, 16, ns);
   offset += 16 * ns;
@@ -129,6 +134,9 @@ export function parseEdf(buf: Buffer): ParsedEdf {
 
   const signalHeaders: EdfSignalHeader[] = [];
   for (let i = 0; i < ns; i++) {
+    if (!Number.isSafeInteger(samplesPerRecords[i]) || samplesPerRecords[i] <= 0) {
+      throw new Error(`Invalid samples-per-record value for signal ${i}: ${samplesPerRecords[i]}`);
+    }
     signalHeaders.push({
       index: i,
       label: labels[i],
@@ -144,9 +152,16 @@ export function parseEdf(buf: Buffer): ParsedEdf {
     });
   }
 
+  offset = header.headerBytes;
   const recordSizeBytes = signalHeaders.reduce((sum, s) => sum + s.samplesPerRecord * 2, 0);
   const bytesAvailable = buf.length - offset;
+  if (!Number.isSafeInteger(recordSizeBytes) || recordSizeBytes <= 0 || bytesAvailable % recordSizeBytes !== 0) {
+    throw new Error("EDF data records are truncated or have an invalid record size");
+  }
   const recordsAvailable = recordSizeBytes > 0 ? Math.floor(bytesAvailable / recordSizeBytes) : 0;
+  if (header.numDataRecords >= 0 && recordsAvailable < header.numDataRecords) {
+    throw new Error(`EDF data is truncated: header declares ${header.numDataRecords} records but only ${recordsAvailable} are present`);
+  }
   const resolvedNumDataRecords =
     header.numDataRecords >= 0 ? Math.min(header.numDataRecords, recordsAvailable) : recordsAvailable;
 

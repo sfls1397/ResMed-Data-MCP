@@ -75,16 +75,22 @@ The connection backing the MCP server is opened SQLite-read-only, so
 `query_raw` can't write regardless of what SQL text it's given — that's
 enforced by the database, not just by string validation.
 
-## Install (from source — not on npm yet)
+## Install
+
+```bash
+npm install -g resmed-data-mcp
+```
+
+Requires **Node.js 22.5+** (uses the built-in `node:sqlite` module — no
+native dependencies, no `npm rebuild` across machines/architectures).
+
+### Develop from source
 
 ```bash
 git clone https://github.com/sfls1397/ResMed-Data-MCP.git
 cd ResMed-Data-MCP
 npm install   # runs `tsc` via the prepare script
 ```
-
-Requires **Node.js 22.5+** (uses the built-in `node:sqlite` module — no
-native dependencies, no `npm rebuild` across machines/architectures).
 
 ### Configure
 
@@ -108,12 +114,12 @@ relocates the whole `~/.resmed-data-mcp/` directory (test/dev only).
 ### Backfill once, then install the LaunchAgents
 
 ```bash
-node dist/cli.js backfill     # one-shot: pulls everything currently on the card
+resmed-data-mcp backfill     # one-shot: pulls everything currently on the card
 ```
 
 Copy `examples/com.resmed-data-mcp.indexer.plist` and
 `examples/com.resmed-data-mcp.server.plist` into `~/Library/LaunchAgents/`,
-replacing `REPLACE_ME_WITH_REPO_PATH`, `REPLACE_ME_WITH_NODE_BIN_DIR`, and
+replacing `REPLACE_ME_WITH_NPM_BIN_DIR` and
 `REPLACE_ME` (your username) with real values, then:
 
 ```bash

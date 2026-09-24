@@ -7,6 +7,9 @@ import { ensureColumn, quoteIdent } from "./open.js";
 import { sanitizeColumnName } from "./schema.js";
 
 export type SourceFileType = "str_summary" | "datalog";
+// Version 2 re-ingests files written by the original implementation, which
+// could retain a new content hash after a failed transaction.
+export const CURRENT_INGEST_VERSION = 2;
 
 export interface IngestFileInput {
   remotePath: string;
@@ -51,10 +54,10 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
   const now = new Date().toISOString();
 
   const existing = db
-    .prepare(`SELECT id, content_sha256 FROM source_files WHERE remote_path = ?`)
-    .get(input.remotePath) as { id: number; content_sha256: string } | undefined;
+    .prepare(`SELECT id, content_sha256, ingest_version FROM source_files WHERE remote_path = ?`)
+    .get(input.remotePath) as { id: number; content_sha256: string; ingest_version: number } | undefined;
 
-  if (existing && existing.content_sha256 === contentSha256) {
+  if (existing && existing.content_sha256 === contentSha256 && existing.ingest_version === CURRENT_INGEST_VERSION) {
     db.prepare(
       `UPDATE source_files SET last_ingested_at = ?, last_sync_run_id = ?, flashair_modified_at = ? WHERE id = ?`
     ).run(now, input.syncRunId, input.flashairModifiedAt, existing.id);
@@ -69,10 +72,16 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
     throw new Error(`Failed to parse ${input.remotePath} as EDF: ${message}`);
   }
 
-  const sourceFileId = upsertSourceFile(db, input, contentSha256, parsed, now, existing?.id);
+  if (input.fileType === "str_summary") {
+    validateNightlySummaryColumns(parsed);
+  }
 
   db.exec("BEGIN IMMEDIATE");
   try {
+    const previousSummaryColumns = existing && input.fileType === "str_summary"
+      ? getPreviousSummaryColumns(db, existing.id)
+      : [];
+    const sourceFileId = upsertSourceFile(db, input, contentSha256, parsed, now, existing?.id);
     if (existing) {
       db.prepare(`DELETE FROM edf_signals WHERE source_file_id = ?`).run(sourceFileId);
     }
@@ -149,16 +158,40 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
     });
 
     if (input.fileType === "str_summary" && recordDates.size > 0) {
-      writeNightlySummary(db, sourceFileId, parsed, recordDates, now);
+      writeNightlySummary(db, sourceFileId, parsed, recordDates, previousSummaryColumns, now);
     }
 
     db.exec("COMMIT");
+    return { sourceFileId, changed: true, recordsWritten };
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
   }
+}
 
-  return { sourceFileId, changed: true, recordsWritten: 0 };
+function validateNightlySummaryColumns(parsed: ParsedEdf): void {
+  const labelsByColumn = new Map<string, string>();
+  for (const signal of parsed.signals) {
+    if (!signal.numericRecords || signal.header.label === "Date") {
+      continue;
+    }
+    const column = sanitizeColumnName(signal.header.label);
+    const normalized = column.toLowerCase();
+    const existingLabel = labelsByColumn.get(normalized);
+    if (existingLabel) {
+      throw new Error(
+        `Signals "${existingLabel}" and "${signal.header.label}" both map to nightly_summary column "${column}"`
+      );
+    }
+    labelsByColumn.set(normalized, signal.header.label);
+  }
+}
+
+function getPreviousSummaryColumns(db: DatabaseSync, sourceFileId: number): string[] {
+  const rows = db
+    .prepare(`SELECT label FROM edf_signals WHERE source_file_id = ? AND is_annotations = 0 AND label <> 'Date'`)
+    .all(sourceFileId) as { label: string }[];
+  return [...new Set(rows.map((row) => sanitizeColumnName(row.label)))];
 }
 
 function upsertSourceFile(
@@ -174,7 +207,7 @@ function upsertSourceFile(
       `UPDATE source_files SET
          file_type = ?, size_bytes = ?, flashair_modified_at = ?, content_sha256 = ?,
          edf_version = ?, edf_patient_id = ?, edf_recording_id = ?, edf_start_timestamp = ?,
-         edf_num_signals = ?, edf_num_data_records = ?, edf_duration_seconds = ?,
+         edf_num_signals = ?, edf_num_data_records = ?, edf_duration_seconds = ?, ingest_version = ?,
          last_ingested_at = ?, last_sync_run_id = ?
        WHERE id = ?`
     ).run(
@@ -189,6 +222,7 @@ function upsertSourceFile(
       parsed.header.numSignals,
       parsed.header.numDataRecords,
       parsed.header.durationOfDataRecordSeconds,
+      CURRENT_INGEST_VERSION,
       now,
       input.syncRunId,
       existingId
@@ -201,9 +235,9 @@ function upsertSourceFile(
       `INSERT INTO source_files
          (remote_path, file_type, size_bytes, flashair_modified_at, content_sha256,
           edf_version, edf_patient_id, edf_recording_id, edf_start_timestamp,
-          edf_num_signals, edf_num_data_records, edf_duration_seconds,
+          edf_num_signals, edf_num_data_records, edf_duration_seconds, ingest_version,
           first_ingested_at, last_ingested_at, last_sync_run_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       input.remotePath,
@@ -218,6 +252,7 @@ function upsertSourceFile(
       parsed.header.numSignals,
       parsed.header.numDataRecords,
       parsed.header.durationOfDataRecordSeconds,
+      CURRENT_INGEST_VERSION,
       now,
       now,
       input.syncRunId
@@ -230,6 +265,7 @@ function writeNightlySummary(
   sourceFileId: number,
   parsed: ParsedEdf,
   recordDates: Map<number, string>,
+  previousColumns: string[],
   now: string
 ): void {
   // Exclude the "Date" signal itself: it's already the nightly_summary
@@ -243,6 +279,9 @@ function writeNightlySummary(
 
   for (const [recordIndex, date] of recordDates) {
     const values: Record<string, number | null> = {};
+    for (const col of previousColumns) {
+      values[col] = null;
+    }
     for (const signal of numericSignals) {
       const rec = signal.numericRecords!.find((r) => r.recordIndex === recordIndex);
       const col = sanitizeColumnName(signal.header.label);

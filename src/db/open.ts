@@ -22,6 +22,8 @@ export function openDatabase(dbPath: string): DatabaseSync {
   for (const statement of SCHEMA_STATEMENTS) {
     db.exec(statement);
   }
+  // Keep existing databases compatible with ingest-format upgrades.
+  ensureColumn(db, "source_files", "ingest_version", "INTEGER NOT NULL DEFAULT 1");
   return db;
 }
 
