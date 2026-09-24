@@ -7,8 +7,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/env</string>
-    <string>node</string>
-    <string>REPLACE_ME_WITH_REPO_PATH/dist/cli.js</string>
+    <string>resmed-data-mcp</string>
     <string>serve</string>
   </array>
   <key>RunAtLoad</key>
@@ -18,7 +17,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>REPLACE_ME_WITH_NODE_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>REPLACE_ME_WITH_NPM_BIN_DIR:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>HOME</key>
     <string>/Users/REPLACE_ME</string>
   </dict>

@@ -1,6 +1,6 @@
 {
   "name": "resmed-data-mcp",
-  "version": "0.1.0",
+  "version": "1.0.2",
   "description": "Mac Mini indexer + MCP server: archives raw ResMed AirSense CPAP data from a FlashAir-enabled SD card into SQLite, queryable over the LAN by any MCP client",
   "type": "module",
   "main": "dist/cli.js",

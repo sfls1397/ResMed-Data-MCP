@@ -67,7 +67,7 @@ export class FlashAirClient {
     this.timeoutMs = options.timeoutMs ?? 10_000;
   }
 
-  private async request(pathAndQuery: string): Promise<Response> {
+  private async request<T>(pathAndQuery: string, readBody: (response: Response) => Promise<T>): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -77,7 +77,7 @@ export class FlashAirClient {
       if (!response.ok) {
         throw new FlashAirError(`FlashAir returned HTTP ${response.status} for ${pathAndQuery}`);
       }
-      return response;
+      return await readBody(response);
     } catch (err) {
       if (err instanceof FlashAirError) {
         throw err;
@@ -92,8 +92,10 @@ export class FlashAirClient {
   /** List a directory via command.cgi?op=100. `dir` must start with "/". */
   async listDirectory(dir: string): Promise<FlashAirEntry[]> {
     const normalizedDir = dir.startsWith("/") ? dir : `/${dir}`;
-    const response = await this.request(`/command.cgi?op=100&DIR=${encodeURIComponent(normalizedDir)}`);
-    const text = await response.text();
+    const text = await this.request(
+      `/command.cgi?op=100&DIR=${encodeURIComponent(normalizedDir)}`,
+      (response) => response.text()
+    );
     const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
     if (lines[0] !== "WLANSD_FILELIST") {
       throw new FlashAirError(`Unexpected listing response for ${normalizedDir}: ${lines[0] || "(empty)"}`);
@@ -111,8 +113,7 @@ export class FlashAirClient {
   /** Download a file's full contents by its absolute card path. */
   async getFile(filePath: string): Promise<Buffer> {
     const normalized = filePath.startsWith("/") ? filePath : `/${filePath}`;
-    const response = await this.request(normalized);
-    const arrayBuffer = await response.arrayBuffer();
+    const arrayBuffer = await this.request(normalized, (response) => response.arrayBuffer());
     return Buffer.from(arrayBuffer);
   }
 

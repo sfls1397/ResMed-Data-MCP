@@ -26,8 +26,14 @@ async function main(): Promise<void> {
   if (command === "backfill") {
     console.error(`resmed-data-mcp backfill v${packageVersion()} — FlashAir: ${config.flashAirBaseUrl}`);
     const db = openDatabase(config.dbPath);
-    await runSyncCycle(db, config, (msg) => console.error(msg));
-    db.close();
+    try {
+      const result = await runSyncCycle(db, config, (msg) => console.error(msg));
+      if (result.errors.length > 0) {
+        process.exitCode = 1;
+      }
+    } finally {
+      db.close();
+    }
     return;
   }
 

@@ -47,8 +47,13 @@ export function createSyncLock(options: {
   const lockFile = options.lockFile;
   const pid = options.pid ?? process.pid;
   const log = options.log || ((msg: string) => console.error(msg));
+  let held = false;
 
   function acquire(): boolean {
+    if (held) {
+      log("Sync already in progress in this process. Skipping this cycle.");
+      return false;
+    }
     try {
       const lockDir = path.dirname(lockFile);
       fs.mkdirSync(lockDir, { recursive: true });
@@ -67,6 +72,7 @@ export function createSyncLock(options: {
       }
 
       fs.writeFileSync(lockFile, formatLockData(pid, Date.now()), { flag: "wx" });
+      held = true;
       return true;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "EEXIST") {
@@ -80,6 +86,9 @@ export function createSyncLock(options: {
   }
 
   function release(): void {
+    if (!held) {
+      return;
+    }
     try {
       if (!fs.existsSync(lockFile)) {
         return;
@@ -88,6 +97,7 @@ export function createSyncLock(options: {
       if (parsed && parsed.pid === pid) {
         fs.rmSync(lockFile, { force: true });
       }
+      held = false;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       log(`Error releasing lock: ${message}`);
