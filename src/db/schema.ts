@@ -39,6 +39,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     edf_num_signals INTEGER,
     edf_num_data_records INTEGER,
     edf_duration_seconds REAL,
+    ingest_version INTEGER NOT NULL DEFAULT 1,
     first_ingested_at TEXT NOT NULL,
     last_ingested_at TEXT NOT NULL,
     last_sync_run_id INTEGER REFERENCES sync_runs(id)
