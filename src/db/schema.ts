@@ -80,6 +80,100 @@ export const SCHEMA_STATEMENTS: string[] = [
     updated_at TEXT NOT NULL
   )`,
 
+  `CREATE TABLE IF NOT EXISTS sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    night_date TEXT NOT NULL,
+    session_start TEXT NOT NULL,
+    brp_file_id INTEGER REFERENCES source_files(id),
+    pld_file_id INTEGER REFERENCES source_files(id),
+    sa2_file_id INTEGER REFERENCES source_files(id),
+    eve_file_id INTEGER REFERENCES source_files(id),
+    csl_file_id INTEGER REFERENCES source_files(id),
+    UNIQUE(night_date, session_start)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS night_signal_stats (
+    night_date TEXT NOT NULL,
+    label TEXT NOT NULL,
+    unit TEXT,
+    sample_count INTEGER NOT NULL,
+    min_value REAL,
+    max_value REAL,
+    avg_value REAL,
+    session_count INTEGER NOT NULL,
+    PRIMARY KEY (night_date, label)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS session_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    night_date TEXT NOT NULL,
+    source_file_id INTEGER NOT NULL REFERENCES source_files(id),
+    file_kind TEXT NOT NULL,
+    onset_seconds REAL NOT NULL,
+    duration_seconds REAL,
+    label TEXT NOT NULL,
+    event_time TEXT,
+    press_at_event REAL,
+    leak_at_event REAL,
+    press_2min_later REAL,
+    pressure_rose INTEGER
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS minute_stats (
+    night_date TEXT NOT NULL,
+    session_start TEXT NOT NULL,
+    minute_index INTEGER NOT NULL,
+    minute_start TEXT NOT NULL,
+    press_avg REAL,
+    leak_avg REAL,
+    flow_lim_avg REAL,
+    tid_vol_avg REAL,
+    resp_rate_avg REAL,
+    snore_avg REAL,
+    spo2_avg REAL,
+    obstructive_count INTEGER NOT NULL DEFAULT 0,
+    central_count INTEGER NOT NULL DEFAULT 0,
+    hypopnea_count INTEGER NOT NULL DEFAULT 0,
+    apnea_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (night_date, session_start, minute_index)
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS signal_hour_stats (
+    night_date TEXT NOT NULL,
+    session_start TEXT NOT NULL,
+    hour_index INTEGER NOT NULL,
+    hour_start TEXT NOT NULL,
+    label TEXT NOT NULL,
+    unit TEXT,
+    sample_count INTEGER NOT NULL,
+    min_value REAL,
+    max_value REAL,
+    avg_value REAL,
+    PRIMARY KEY (night_date, session_start, hour_index, label)
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_sessions_night ON sessions(night_date)`,
+  `CREATE INDEX IF NOT EXISTS idx_session_events_night ON session_events(night_date)`,
+  `CREATE TABLE IF NOT EXISTS night_therapy (
+    night_date TEXT PRIMARY KEY,
+    mode REAL,
+    min_press REAL,
+    max_press REAL,
+    epr_level REAL,
+    ahi REAL,
+    leak_95 REAL,
+    minute_count INTEGER NOT NULL,
+    minutes_at_min INTEGER,
+    minutes_at_max INTEGER,
+    obstructive_count INTEGER NOT NULL,
+    central_count INTEGER NOT NULL,
+    hypopnea_count INTEGER NOT NULL,
+    obstructive_at_min INTEGER,
+    obstructive_at_max INTEGER,
+    press_avg REAL
+  )`,
+
+  `CREATE INDEX IF NOT EXISTS idx_minute_stats_night ON minute_stats(night_date)`,
   `CREATE INDEX IF NOT EXISTS idx_edf_signals_source_label ON edf_signals(source_file_id, label)`,
   `CREATE INDEX IF NOT EXISTS idx_signal_records_signal ON edf_signal_records(signal_id)`,
   `CREATE INDEX IF NOT EXISTS idx_source_files_type ON source_files(file_type)`

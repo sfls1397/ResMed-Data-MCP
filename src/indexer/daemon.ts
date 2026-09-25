@@ -4,6 +4,8 @@ import { createSyncLock } from "../lock.js";
 import { syncOnce } from "./backfill.js";
 import type { SyncResult } from "./backfill.js";
 import type { ResolvedConfig } from "../config.js";
+import { clearNightlySentinels } from "../db/sentinels.js";
+import { rebuildAllDetailRollups } from "../db/sessions.js";
 
 export interface RunIndexerDaemonOptions {
   db: DatabaseSync;
@@ -83,6 +85,19 @@ export async function runIndexerDaemon(options: RunIndexerDaemonOptions): Promis
       lock.release();
     }
   };
+
+  const datalogNights = options.db
+    .prepare(`SELECT COUNT(DISTINCT substr(remote_path, instr(remote_path, '/DATALOG/') + 9, 8)) AS n FROM source_files WHERE remote_path LIKE '%/DATALOG/%'`)
+    .get() as { n: number };
+  const rolledUp = options.db.prepare(`SELECT COUNT(DISTINCT night_date) AS n FROM night_signal_stats`).get() as { n: number };
+  const hourNights = options.db.prepare(`SELECT COUNT(DISTINCT night_date) AS n FROM signal_hour_stats`).get() as { n: number };
+  const minuteNights = options.db.prepare(`SELECT COUNT(DISTINCT night_date) AS n FROM minute_stats`).get() as { n: number };
+  const therapyNights = options.db.prepare(`SELECT COUNT(*) AS n FROM night_therapy`).get() as { n: number };
+  clearNightlySentinels(options.db);
+  if (rolledUp.n < datalogNights.n || hourNights.n < rolledUp.n || minuteNights.n < rolledUp.n || therapyNights.n < minuteNights.n) {
+    log(`Building nightly detail rollups for ${datalogNights.n} nights`);
+    rebuildAllDetailRollups(options.db, log);
+  }
 
   await tick();
   if (options.once) {

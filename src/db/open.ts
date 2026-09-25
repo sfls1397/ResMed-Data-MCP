@@ -24,6 +24,10 @@ export function openDatabase(dbPath: string): DatabaseSync {
   }
   // Keep existing databases compatible with ingest-format upgrades.
   ensureColumn(db, "source_files", "ingest_version", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "session_events", "press_at_event", "REAL");
+  ensureColumn(db, "session_events", "leak_at_event", "REAL");
+  ensureColumn(db, "session_events", "press_2min_later", "REAL");
+  ensureColumn(db, "session_events", "pressure_rose", "INTEGER");
   return db;
 }
 
