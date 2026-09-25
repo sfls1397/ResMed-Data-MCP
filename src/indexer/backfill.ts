@@ -45,37 +45,39 @@ async function syncDeviceIdentification(
       return;
     }
     const now = new Date().toISOString();
-    const existing = db
-      .prepare(`SELECT id FROM devices WHERE universal_identifier = ?`)
-      .get(product.UniversalIdentifier) as { id: number } | undefined;
-    if (existing) {
-      db.prepare(`UPDATE devices SET last_seen_at = ?, raw_json = ? WHERE id = ?`).run(
-        now,
-        raw.toString("utf8"),
-        existing.id
-      );
-    } else {
-      db.prepare(
-        `INSERT INTO devices
-           (universal_identifier, serial_number, product_name, product_code, hardware_identifier,
-            software_application_id, configuration_id, data_version_id, region_identifier,
-            raw_json, first_seen_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      ).run(
-        product.UniversalIdentifier,
-        product.SerialNumber ?? null,
-        product.ProductName ?? null,
-        product.ProductCode ?? null,
-        profile?.Hardware?.HardwareIdentifier ?? null,
-        profile?.Software?.ApplicationIdentifier ?? null,
-        profile?.Software?.ConfigurationIdentifier ?? null,
-        profile?.Software?.DataVersionIdentifier != null ? String(profile.Software.DataVersionIdentifier) : null,
-        profile?.Software?.RegionIdentifier != null ? String(profile.Software.RegionIdentifier) : null,
-        raw.toString("utf8"),
-        now,
-        now
-      );
-    }
+    // Firmware updates change the software/config/data-version identifiers on
+    // the same device, so refresh every parsed column, not just raw_json.
+    db.prepare(
+      `INSERT INTO devices
+         (universal_identifier, serial_number, product_name, product_code, hardware_identifier,
+          software_application_id, configuration_id, data_version_id, region_identifier,
+          raw_json, first_seen_at, last_seen_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(universal_identifier) DO UPDATE SET
+         serial_number = excluded.serial_number,
+         product_name = excluded.product_name,
+         product_code = excluded.product_code,
+         hardware_identifier = excluded.hardware_identifier,
+         software_application_id = excluded.software_application_id,
+         configuration_id = excluded.configuration_id,
+         data_version_id = excluded.data_version_id,
+         region_identifier = excluded.region_identifier,
+         raw_json = excluded.raw_json,
+         last_seen_at = excluded.last_seen_at`
+    ).run(
+      product.UniversalIdentifier,
+      product.SerialNumber ?? null,
+      product.ProductName ?? null,
+      product.ProductCode ?? null,
+      profile?.Hardware?.HardwareIdentifier ?? null,
+      profile?.Software?.ApplicationIdentifier ?? null,
+      profile?.Software?.ConfigurationIdentifier ?? null,
+      profile?.Software?.DataVersionIdentifier != null ? String(profile.Software.DataVersionIdentifier) : null,
+      profile?.Software?.RegionIdentifier != null ? String(profile.Software.RegionIdentifier) : null,
+      raw.toString("utf8"),
+      now,
+      now
+    );
   } catch (err) {
     log(`Could not sync device identification: ${err instanceof Error ? err.message : String(err)}`);
   }
