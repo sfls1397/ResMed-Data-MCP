@@ -5,6 +5,8 @@ import { digitalToPhysical } from "../edf/types.js";
 import type { ParsedEdf } from "../edf/types.js";
 import { ensureColumn, quoteIdent } from "./open.js";
 import { sanitizeColumnName } from "./schema.js";
+import { nightlyMeasuredValue } from "./sentinels.js";
+import { nightDateFromPath, rebuildNightDetail } from "./sessions.js";
 
 export type SourceFileType = "str_summary" | "datalog";
 // Version 2 re-ingests files written by the original implementation, which
@@ -162,6 +164,12 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
     }
 
     db.exec("COMMIT");
+    if (input.fileType === "datalog") {
+      const night = nightDateFromPath(input.remotePath);
+      if (night) {
+        rebuildNightDetail(db, night);
+      }
+    }
     return { sourceFileId, changed: true, recordsWritten };
   } catch (err) {
     db.exec("ROLLBACK");
@@ -285,7 +293,8 @@ function writeNightlySummary(
     for (const signal of numericSignals) {
       const rec = signal.numericRecords!.find((r) => r.recordIndex === recordIndex);
       const col = sanitizeColumnName(signal.header.label);
-      values[col] = rec && rec.digitalSamples.length > 0 ? digitalToPhysical(signal.header, rec.digitalSamples[0]) : null;
+      const physical = rec && rec.digitalSamples.length > 0 ? digitalToPhysical(signal.header, rec.digitalSamples[0]) : null;
+      values[col] = physical == null ? null : nightlyMeasuredValue(col, physical);
     }
 
     const cols = ["date", "source_file_id", "record_index", "updated_at", ...Object.keys(values)];

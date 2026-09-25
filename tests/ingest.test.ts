@@ -58,6 +58,17 @@ describe("ingestEdfFile", () => {
     db.close();
   });
 
+  it("stores not-measured SpO2 and no-session duration as null", () => {
+    const db = freshDb();
+    ingestEdfFile(db, input(buildSummary(["Date", "Duration", "SpO2_50", "Mode"], [20_000, -1, -1, -1])));
+    expect(db.prepare("SELECT Duration, SpO2_50, Mode FROM nightly_summary").get()).toMatchObject({
+      Duration: null,
+      SpO2_50: null,
+      Mode: null
+    });
+    db.close();
+  });
+
   it("re-ingests rows created by the prior ingest format even when the file hash matches", () => {
     const db = freshDb();
     const summary = buildSummary(["Date", "AHI"], [20_000, 5]);

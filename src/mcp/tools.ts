@@ -53,7 +53,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "list_signals",
     description:
-      "Discover every raw signal label this device has ever reported, across STR.edf (nightly summary) and any DATALOG detail files, with unit and which files/dates carry it. Use this before get_signal_samples or query_raw.",
+      "List raw signal labels stored in the archive. Therapy questions should use get_therapy_nights, get_night_minutes, and get_night_detail instead of these raw labels.",
     inputSchema: {
       type: "object",
       properties: {
@@ -65,7 +65,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "get_signal_samples",
     description:
-      "Decoded raw samples for one signal in one source file (physical values for numeric signals; raw byte length for undecoded EDF+ annotation signals). remote_path defaults to /STR.edf; pass a DATALOG file's remote_path (from list_signals) for detail-level waveform data.",
+      "Raw recording samples for one signal in one file. Do not use this for therapy questions. Use get_therapy_nights for how a night sat against its pressure settings, get_night_minutes for the minute-by-minute night, and get_night_detail for each event.",
     inputSchema: {
       type: "object",
       properties: {
@@ -79,13 +79,50 @@ export const TOOL_DEFINITIONS = [
   {
     name: "query_raw",
     description:
-      "Run a single read-only SELECT against the full SQLite schema (nightly_summary, source_files, edf_signals, edf_signal_records, devices, sync_runs) for anything the other tools don't cover. The connection is opened read-only, so writes are rejected at the database level regardless of the SQL text. Results are capped at 1000 rows.",
+      "Read-only SELECT for a question the other tools do not answer. Prefer get_therapy_nights, get_night_minutes, get_night_detail, list_nights, and get_trend. Useful tables: night_therapy, minute_stats, session_events, nightly_summary. Results are capped at 1000 rows.",
     inputSchema: {
       type: "object",
       properties: {
         sql: { type: "string", description: "A single SELECT statement" }
       },
       required: ["sql"]
+    }
+  },
+  {
+    name: "get_night_detail",
+    description:
+      "One calendar night as sessions, whole-night signal stats, and decoded events. Each event includes pressure and leak during that minute, pressure over the next two minutes, and whether pressure rose. Use get_night_minutes for the minute-by-minute pressure, leak, flow limitation, breathing, snore, oxygen, and event counts.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "Night date, YYYY-MM-DD. This is the DATALOG folder date." }
+      },
+      required: ["date"]
+    }
+  },
+  {
+    name: "get_night_minutes",
+    description:
+      "Minute-by-minute therapy rows for one night. Each minute has average pressure, leak, flow limitation, tidal volume, respiratory rate, snore, and SpO2 when it was measuring, plus counts of obstructive apneas, central apneas, hypopneas, and unspecified apneas. This is the view to use when asking how breathing and pressure changed through the night.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "Night date, YYYY-MM-DD. This is the DATALOG folder date." }
+      },
+      required: ["date"]
+    }
+  },
+  {
+    name: "get_therapy_nights",
+    description:
+      "One row per night for setting decisions. Includes the mode, minimum pressure, maximum pressure, EPR, AHI, and leak from the nightly summary, plus how many minutes pressure sat within 0.5 of the minimum and of the maximum, and how many obstructive apneas fell in those minutes. Use this to compare nights and decide whether pressure should be higher, lower, or fixed. Use get_night_minutes for one night's minute-by-minute detail.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date_from: { type: "string", description: "Inclusive start date, YYYY-MM-DD" },
+        date_to: { type: "string", description: "Inclusive end date, YYYY-MM-DD" },
+        limit: { type: "number", description: "Max nights, default 30, max 365" }
+      }
     }
   },
   {
@@ -299,6 +336,80 @@ export function runQueryRaw(db: DatabaseSync, args: { sql?: string }): string {
   }
 }
 
+export function runGetNightDetail(db: DatabaseSync, args: { date?: string }): string {
+  if (!args.date) {
+    return errorJson("date is required");
+  }
+  const sessions = db
+    .prepare(
+      `SELECT s.session_start, s.brp_file_id, s.pld_file_id, s.sa2_file_id, s.eve_file_id, s.csl_file_id
+       FROM sessions s WHERE s.night_date = ? ORDER BY s.session_start`
+    )
+    .all(args.date);
+  const signals = db
+    .prepare(
+      `SELECT label, unit, sample_count, min_value, max_value, avg_value, session_count
+       FROM night_signal_stats WHERE night_date = ? ORDER BY label`
+    )
+    .all(args.date);
+  const hours = db
+    .prepare(
+      `SELECT session_start, hour_index, hour_start, label, unit, sample_count, min_value, max_value, avg_value
+       FROM signal_hour_stats WHERE night_date = ? ORDER BY session_start, hour_index, label`
+    )
+    .all(args.date);
+  const events = db
+    .prepare(
+      `SELECT file_kind, onset_seconds, duration_seconds, label, event_time,
+              press_at_event, leak_at_event, press_2min_later, pressure_rose
+       FROM session_events WHERE night_date = ? ORDER BY event_time, onset_seconds, label`
+    )
+    .all(args.date);
+  return json({
+    date: args.date,
+    session_count: sessions.length,
+    has_breath_waveform: sessions.some((row) => (row as { brp_file_id: number | null }).brp_file_id != null),
+    has_oximetry: sessions.some((row) => (row as { sa2_file_id: number | null }).sa2_file_id != null),
+    sessions,
+    signals,
+    hours,
+    events
+  });
+}
+
+export function runGetNightMinutes(db: DatabaseSync, args: { date?: string }): string {
+  if (!args.date) {
+    return errorJson("date is required");
+  }
+  const minutes = db
+    .prepare(
+      `SELECT session_start, minute_index, minute_start, press_avg, leak_avg, flow_lim_avg, tid_vol_avg,
+              resp_rate_avg, snore_avg, spo2_avg, obstructive_count, central_count, hypopnea_count, apnea_count
+       FROM minute_stats WHERE night_date = ? ORDER BY session_start, minute_index`
+    )
+    .all(args.date);
+  return json({ date: args.date, count: minutes.length, minutes });
+}
+
+export function runGetTherapyNights(db: DatabaseSync, args: { date_from?: string; date_to?: string; limit?: number }): string {
+  const limit = clampLimit(args.limit, 30, 365);
+  const conditions: string[] = [];
+  const params: (string | number)[] = [];
+  if (args.date_from) {
+    conditions.push("night_date >= ?");
+    params.push(args.date_from);
+  }
+  if (args.date_to) {
+    conditions.push("night_date <= ?");
+    params.push(args.date_to);
+  }
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const nights = db
+    .prepare(`SELECT * FROM night_therapy ${where} ORDER BY night_date DESC LIMIT ?`)
+    .all(...params, limit);
+  return json({ count: nights.length, nights });
+}
+
 export function runSyncStatus(db: DatabaseSync): string {
   const lastRun = db.prepare(`SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1`).get();
   const device = db.prepare(`SELECT * FROM devices ORDER BY id DESC LIMIT 1`).get();
@@ -325,6 +436,12 @@ export function callTool(db: DatabaseSync, name: string, args: Record<string, un
       return runGetSignalSamples(db, args);
     case "query_raw":
       return runQueryRaw(db, args as { sql?: string });
+    case "get_night_detail":
+      return runGetNightDetail(db, args as { date?: string });
+    case "get_night_minutes":
+      return runGetNightMinutes(db, args as { date?: string });
+    case "get_therapy_nights":
+      return runGetTherapyNights(db, args);
     case "sync_status":
       return runSyncStatus(db);
     default:

@@ -51,8 +51,7 @@ points at `http://<host>:8420/mcp`.
 - **`source_files`, `sync_runs`, `devices`** — provenance and operational
   history: what file came from where, when, and whether syncing is healthy.
 
-EDF+ annotation signals (event timestamps, if the device ever writes them)
-are stored as raw undecoded bytes for now — see [Known limitations](#known-limitations).
+Event files are decoded into `session_events`. Each apnea or hypopnea row includes the pressure and leak at that minute and whether pressure rose over the next two minutes. `minute_stats` is one row per minute of pressure, leak, flow limitation, tidal volume, respiratory rate, snore, oxygen, and event counts. `night_therapy` rolls those minutes up against the night's minimum and maximum pressure.
 
 No vector database: this data is fully structured and numeric (nightly
 metrics, calibrated signal samples), which SQL aggregation handles better
@@ -66,8 +65,11 @@ worth searching semantically, that's a reason to reconsider, not a default.
 | `list_nights` | Nightly summary rows in a date range, newest first. |
 | `get_night` | Full summary row for one date. |
 | `get_trend` | Time series + min/max/avg for one `nightly_summary` column. |
+| `get_therapy_nights` | One row per night: settings, AHI, leak, minutes spent at the pressure floor and ceiling, and obstructive events in those minutes. |
+| `get_night_minutes` | Minute-by-minute pressure, leak, flow limitation, breathing, snore, oxygen, and event counts for one night. |
+| `get_night_detail` | Sessions for one night, plus each event with pressure, leak, and whether pressure rose afterward. |
 | `list_signals` | Discover every raw signal label across all ingested files. |
-| `get_signal_samples` | Decoded raw samples for one signal in one file. |
+| `get_signal_samples` | Raw samples for one signal in one file. Not the therapy view. |
 | `query_raw` | Arbitrary read-only SELECT against the full schema. |
 | `sync_status` | Last sync run, device info, row counts — how fresh is this. |
 

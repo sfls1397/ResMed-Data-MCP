@@ -51,33 +51,66 @@ function parseFileListLine(line: string, requestedDir: string): FlashAirEntry | 
 export interface FlashAirClientOptions {
   baseUrl: string;
   fetchFn?: typeof fetch;
+  /**
+   * Inactivity deadline. The timer starts at the request and resets each time
+   * response bytes arrive, so a slow FlashAir transfer is allowed to finish
+   * and a stalled socket still gets cut off.
+   */
   timeoutMs?: number;
+  maxAttempts?: number;
+  retryDelayMs?: number;
 }
 
 export class FlashAirError extends Error {}
+
+/** Silence longer than this means the card stalled, not that the file is large. */
+const DEFAULT_INACTIVITY_TIMEOUT_MS = 60_000;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_RETRY_DELAY_MS = 1_000;
+
+function isTransientFlashAirFailure(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /operation was aborted|fetch failed|ECONNRESET|ETIMEDOUT|other side closed|network/i.test(message);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export class FlashAirClient {
   private readonly baseUrl: string;
   private readonly fetchFn: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly maxAttempts: number;
+  private readonly retryDelayMs: number;
 
   constructor(options: FlashAirClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.fetchFn = options.fetchFn || fetch;
-    this.timeoutMs = options.timeoutMs ?? 10_000;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_INACTIVITY_TIMEOUT_MS;
+    this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+    this.retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
   }
 
-  private async request<T>(pathAndQuery: string, readBody: (response: Response) => Promise<T>): Promise<T> {
+  private async requestOnce<T>(
+    pathAndQuery: string,
+    readBody: (response: Response, touch: () => void) => Promise<T>
+  ): Promise<T> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    let timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const touch = (): void => {
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    };
     try {
       const response = await this.fetchFn(`${this.baseUrl}${pathAndQuery}`, {
         signal: controller.signal
       });
+      touch();
       if (!response.ok) {
         throw new FlashAirError(`FlashAir returned HTTP ${response.status} for ${pathAndQuery}`);
       }
-      return await readBody(response);
+      return await readBody(response, touch);
     } catch (err) {
       if (err instanceof FlashAirError) {
         throw err;
@@ -87,6 +120,27 @@ export class FlashAirClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  private async request<T>(
+    pathAndQuery: string,
+    readBody: (response: Response, touch: () => void) => Promise<T>
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      try {
+        return await this.requestOnce(pathAndQuery, readBody);
+      } catch (err) {
+        lastError = err;
+        if (attempt === this.maxAttempts || !isTransientFlashAirFailure(err)) {
+          throw err;
+        }
+        if (this.retryDelayMs > 0) {
+          await delay(this.retryDelayMs);
+        }
+      }
+    }
+    throw lastError;
   }
 
   /** List a directory via command.cgi?op=100. `dir` must start with "/". */
@@ -113,8 +167,25 @@ export class FlashAirClient {
   /** Download a file's full contents by its absolute card path. */
   async getFile(filePath: string): Promise<Buffer> {
     const normalized = filePath.startsWith("/") ? filePath : `/${filePath}`;
-    const arrayBuffer = await this.request(normalized, (response) => response.arrayBuffer());
-    return Buffer.from(arrayBuffer);
+    return this.request(normalized, async (response, touch) => {
+      const body = response.body;
+      if (!body) {
+        return Buffer.from(await response.arrayBuffer());
+      }
+      const reader = body.getReader();
+      const chunks: Uint8Array[] = [];
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        if (value && value.byteLength > 0) {
+          touch();
+          chunks.push(value);
+        }
+      }
+      return Buffer.concat(chunks);
+    });
   }
 
 }
