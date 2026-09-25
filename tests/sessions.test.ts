@@ -4,6 +4,19 @@ import { rebuildNightDetail } from "../src/db/sessions.js";
 import { runGetNightDetail, runGetNightMinutes, runGetTherapyNights } from "../src/mcp/tools.js";
 
 describe("rebuildNightDetail", () => {
+  it("includes just-after-midnight New Year's files in the prior therapy night", () => {
+    const db = openDatabase(":memory:");
+    db.prepare(
+      `INSERT INTO source_files
+         (remote_path, file_type, ingest_version, first_ingested_at, last_ingested_at)
+       VALUES ('/DATALOG/2023/20230101_022401_BRP.edf', 'datalog', 2, 't', 't')`
+    ).run();
+
+    expect(rebuildNightDetail(db, "2022-12-31")).toBe(1);
+    expect(db.prepare("SELECT night_date FROM sessions").get()).toMatchObject({ night_date: "2022-12-31" });
+    db.close();
+  });
+
   it("groups files a few seconds apart into one session and rolls up samples", () => {
     const db = openDatabase(":memory:");
     const insertFile = db.prepare(

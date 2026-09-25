@@ -69,6 +69,29 @@ describe("ingestEdfFile", () => {
     db.close();
   });
 
+  it("refreshes a previously-derived therapy row when STR.edf changes", () => {
+    const db = freshDb();
+    ingestEdfFile(db, input(buildSummary(["Date", "S.A.MinPress"], [20_000, 8])));
+    const { date } = db.prepare("SELECT date FROM nightly_summary").get() as { date: string };
+    db.prepare(
+      `INSERT INTO minute_stats (night_date, session_start, minute_index, minute_start, press_avg)
+       VALUES (?, '2026-09-23T22:00:00', 0, '2026-09-23T22:00:00Z', 8)`
+    ).run(date);
+    db.prepare(
+      `INSERT INTO night_therapy
+         (night_date, min_press, minute_count, obstructive_count, central_count, hypopnea_count, minutes_at_min, obstructive_at_min)
+       VALUES (?, 8, 1, 0, 0, 0, 1, 0)`
+    ).run(date);
+
+    ingestEdfFile(db, input(buildSummary(["Date", "S.A.MinPress"], [20_000, 11])));
+
+    expect(db.prepare("SELECT min_press, minutes_at_min FROM night_therapy WHERE night_date = ?").get(date)).toMatchObject({
+      min_press: 11,
+      minutes_at_min: 0
+    });
+    db.close();
+  });
+
   it("re-ingests rows created by the prior ingest format even when the file hash matches", () => {
     const db = freshDb();
     const summary = buildSummary(["Date", "AHI"], [20_000, 5]);

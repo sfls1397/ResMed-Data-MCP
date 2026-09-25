@@ -159,15 +159,39 @@ function addSeconds(start: string | null, seconds: number): string | null {
   return new Date(base + seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/** Group one night's DATALOG files into sessions and replace that night's signal stats. */
+/**
+ * Rebuild one night atomically so MCP readers see either the old complete
+ * rollup or the new complete rollup, never the intermediate DELETE state.
+ */
 export function rebuildNightDetail(db: DatabaseSync, nightDate: string): number {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const sessionCount = rebuildNightDetailInTransaction(db, nightDate);
+    db.exec("COMMIT");
+    return sessionCount;
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+/** Rebuild one night's detail while the caller owns the database transaction. */
+export function rebuildNightDetailInTransaction(db: DatabaseSync, nightDate: string): number {
   const compact = nightDate.replace(/-/g, "");
+  const folderYear = Number(nightDate.slice(0, 4));
+  // Older OSCAR archives use DATALOG/YYYY. A session after midnight on
+  // January 1 belongs to the prior night's date, so include the next folder
+  // year before filtering with nightDateFromPath below.
+  const nextFolderYear = Number.isFinite(folderYear) ? String(folderYear + 1) : "";
   const rows = db
     .prepare(
       `SELECT id, remote_path FROM source_files
-       WHERE file_type = 'datalog' AND (remote_path LIKE ? OR remote_path LIKE ?)`
+       WHERE file_type = 'datalog' AND (remote_path LIKE ? OR remote_path LIKE ? OR remote_path LIKE ?)`
     )
-    .all(`%/DATALOG/${compact}/%`, `%/DATALOG/${nightDate.slice(0, 4)}/%`) as { id: number; remote_path: string }[];
+    .all(`%/DATALOG/${compact}/%`, `%/DATALOG/${nightDate.slice(0, 4)}/%`, `%/DATALOG/${nextFolderYear}/%`) as {
+      id: number;
+      remote_path: string;
+    }[];
   const files = rows.flatMap((row) => {
     const parsed = parseDetailFile(row);
     return parsed && nightDateFromPath(row.remote_path) === nightDate ? [parsed] : [];
@@ -469,13 +493,31 @@ export function rebuildNightDetail(db: DatabaseSync, nightDate: string): number 
     );
   }
 
-  writeNightTherapy(db, nightDate, [...minutes.values()]);
+  refreshNightTherapy(db, nightDate);
   return sessionIds.length;
 }
 
 const AT_PRESSURE_CM = 0.5;
 
-function writeNightTherapy(db: DatabaseSync, nightDate: string, minutes: MinuteBucket[]): void {
+interface TherapyMinute {
+  press: number | null;
+  obstructive: number;
+  central: number;
+  hypopnea: number;
+}
+
+/** Refresh the summary-derived setting fields against the already-derived minute rows. */
+export function refreshNightTherapy(db: DatabaseSync, nightDate: string): void {
+  const minutes = db
+    .prepare(
+      `SELECT press_avg AS press, obstructive_count AS obstructive, central_count AS central, hypopnea_count AS hypopnea
+       FROM minute_stats WHERE night_date = ?`
+    )
+    .all(nightDate) as unknown as TherapyMinute[];
+  writeNightTherapy(db, nightDate, minutes);
+}
+
+function writeNightTherapy(db: DatabaseSync, nightDate: string, minutes: TherapyMinute[]): void {
   if (minutes.length === 0) {
     return;
   }
@@ -498,7 +540,7 @@ function writeNightTherapy(db: DatabaseSync, nightDate: string, minutes: MinuteB
   let obstructiveAtMax = 0;
   let sawPress = false;
   for (const minute of minutes) {
-    const press = fieldAvg(minute.fields.press);
+    const press = minute.press;
     obstructive += minute.obstructive;
     central += minute.central;
     hypopnea += minute.hypopnea;
@@ -522,7 +564,23 @@ function writeNightTherapy(db: DatabaseSync, nightDate: string, minutes: MinuteB
        (night_date, mode, min_press, max_press, epr_level, ahi, leak_95, minute_count,
         minutes_at_min, minutes_at_max, obstructive_count, central_count, hypopnea_count,
         obstructive_at_min, obstructive_at_max, press_avg)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(night_date) DO UPDATE SET
+       mode = excluded.mode,
+       min_press = excluded.min_press,
+       max_press = excluded.max_press,
+       epr_level = excluded.epr_level,
+       ahi = excluded.ahi,
+       leak_95 = excluded.leak_95,
+       minute_count = excluded.minute_count,
+       minutes_at_min = excluded.minutes_at_min,
+       minutes_at_max = excluded.minutes_at_max,
+       obstructive_count = excluded.obstructive_count,
+       central_count = excluded.central_count,
+       hypopnea_count = excluded.hypopnea_count,
+       obstructive_at_min = excluded.obstructive_at_min,
+       obstructive_at_max = excluded.obstructive_at_max,
+       press_avg = excluded.press_avg`
   ).run(
     nightDate,
     settings?.Mode ?? null,

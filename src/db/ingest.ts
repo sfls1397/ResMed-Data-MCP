@@ -6,7 +6,7 @@ import type { ParsedEdf } from "../edf/types.js";
 import { ensureColumn, quoteIdent } from "./open.js";
 import { sanitizeColumnName } from "./schema.js";
 import { nightlyMeasuredValue } from "./sentinels.js";
-import { nightDateFromPath, rebuildNightDetail } from "./sessions.js";
+import { nightDateFromPath, rebuildNightDetailInTransaction, refreshNightTherapy } from "./sessions.js";
 
 export type SourceFileType = "str_summary" | "datalog";
 // Version 2 re-ingests files written by the original implementation, which
@@ -161,15 +161,24 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
 
     if (input.fileType === "str_summary" && recordDates.size > 0) {
       writeNightlySummary(db, sourceFileId, parsed, recordDates, previousSummaryColumns, now);
+      // STR.edf is the authority for AHI and pressure settings, while the
+      // DATALOG-derived rows may already exist from an earlier sync. Keep
+      // those joined therapy rows current even when no detail file changed.
+      for (const nightDate of new Set(recordDates.values())) {
+        refreshNightTherapy(db, nightDate);
+      }
     }
 
-    db.exec("COMMIT");
     if (input.fileType === "datalog") {
       const night = nightDateFromPath(input.remotePath);
       if (night) {
-        rebuildNightDetail(db, night);
+        // Keep source data and its derived view in the same transaction: a
+        // failed rollup leaves the prior source and rollup intact for retry.
+        rebuildNightDetailInTransaction(db, night);
       }
     }
+
+    db.exec("COMMIT");
     return { sourceFileId, changed: true, recordsWritten };
   } catch (err) {
     db.exec("ROLLBACK");

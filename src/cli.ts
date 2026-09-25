@@ -6,6 +6,7 @@ import { getAppDir, getLockFilePath } from "./paths.js";
 import { ensureAppDir } from "./config.js";
 import { openDatabase, openDatabaseReadOnly } from "./db/open.js";
 import { runIndexerDaemon, runSyncCycle } from "./indexer/daemon.js";
+import { createSyncLock } from "./lock.js";
 import { startHttpServer } from "./mcp/server.js";
 import { packageVersion } from "./version.js";
 
@@ -25,6 +26,14 @@ async function main(): Promise<void> {
 
   if (command === "backfill") {
     console.error(`resmed-data-mcp backfill v${packageVersion()} — FlashAir: ${config.flashAirBaseUrl}`);
+    // Share the indexer's lock so a manual backfill never writes alongside a
+    // running indexer's sync or detail rollup.
+    const lock = createSyncLock({ lockFile: getLockFilePath({ env }) });
+    if (!lock.acquire()) {
+      console.error("The indexer is already syncing; it will pick up the card's files. Try again later.");
+      process.exitCode = 1;
+      return;
+    }
     const db = openDatabase(config.dbPath);
     try {
       const result = await runSyncCycle(db, config, (msg) => console.error(msg));
@@ -33,6 +42,7 @@ async function main(): Promise<void> {
       }
     } finally {
       db.close();
+      lock.release();
     }
     return;
   }
