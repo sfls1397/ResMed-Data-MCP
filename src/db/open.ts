@@ -14,9 +14,15 @@ const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
 };
 export type DatabaseSync = DatabaseSyncType;
 
+// The indexer, a manual backfill, and the server's startup schema check can
+// all write. Wait out another process's short transaction instead of failing
+// immediately with "database is locked".
+const BUSY_TIMEOUT_MS = 30_000;
+
 export function openDatabase(dbPath: string): DatabaseSync {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
   const db = new DatabaseSync(dbPath);
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");
   for (const statement of SCHEMA_STATEMENTS) {
@@ -34,6 +40,7 @@ export function openDatabase(dbPath: string): DatabaseSync {
 /** Read-only handle for the MCP server: same file, WAL lets it read while the indexer writes. */
 export function openDatabaseReadOnly(dbPath: string): DatabaseSync {
   const db = new DatabaseSync(dbPath, { readOnly: true });
+  db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
   return db;
 }
 
