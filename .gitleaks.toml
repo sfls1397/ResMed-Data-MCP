@@ -13,7 +13,10 @@ regexes = ['''/Users/(?:example|test|REPLACE_ME|fixture)(?:$|/)''']
 [[rules]]
 id = "private-hostname"
 description = "Private Mac or LAN hostname"
-regex = '''(?i)\b(?:[a-z0-9-]+\.lan|[a-z0-9-]*(?:mac|mini)[a-z0-9-]*\.local)\b'''
+regex = '''(?i)\b[a-z0-9-]+\.(?:lan|local)\b'''
+[[rules.allowlists]]
+regexTarget = "match"
+regexes = ['''(?i)^flashair\.local$''']
 
 [[rules]]
 id = "cloaked-relay-email"
