@@ -99,11 +99,11 @@ npm install   # runs `tsc` via the prepare script
 Copy `examples/config.json.example` to `~/.resmed-data-mcp/config.json` and
 set `flashAirBaseUrl` to your FlashAir's address (find it with your router's
 DHCP client list, or the FlashAir's own config page). Everything else has a
-sane default:
+sane default. Configure the address once; later package upgrades reuse the existing local file:
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `flashAirBaseUrl` | `http://192.0.2.10` | The FlashAir's HTTP address |
+| `flashAirBaseUrl` | `http://flashair.local` | Generic placeholder; configure your actual card address locally |
 | `pollInterval` | `5m` | Clamped to 30s–1h |
 | `serverHost` | `0.0.0.0` | Bind address for the MCP server |
 | `serverPort` | `8420` | |
@@ -167,3 +167,24 @@ malicious client can't write through it.
 ## License
 
 MIT
+
+
+## Privacy gates and synthetic fixtures
+
+EDF test buffers are constructed in code with generic patient headers and
+fixed samples. SQL fixtures use in-memory databases and synthetic therapy
+values; no patient export, card image, or local SQLite database is tracked.
+Keep actual device addresses and patient data in local settings and storage.
+
+Install Gitleaks 8.30.1 and enable the staged gate once per clone:
+
+```bash
+git config core.hooksPath .githooks
+gitleaks git --log-opts=--all --config .gitleaks.toml --redact=100 --no-banner .
+npm run build && npm run scan:package
+```
+
+Push and pull-request CI scans full fetched history and package contents.
+The prepublishOnly lifecycle rebuilds and scans the exact npm file list.
+After a history rewrite, discard old clones and re-clone; merging old history
+can restore removed data. Releases use GitHub Release → npm OIDC.
