@@ -1,0 +1,12 @@
+{
+  "audit": [
+    {
+      "package": "@modelcontextprotocol/sdk",
+      "sha256": "5cac53f3200a3935f18536d3eceb5327a5a8d38239f6ec670a0af4ababbed58c",
+      "expires": "2026-11-10",
+      "reason": "Existing production dependency advisory; upgrade and compatibility-test in a separately versioned product release. This tooling-only change does not deploy dependency updates.",
+      "tracking": "FINDINGS.md#dependency-findings; upstream advisories listed here"
+    }
+  ],
+  "semgrep": []
+}
