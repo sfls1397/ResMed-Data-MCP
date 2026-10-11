@@ -1,6 +1,6 @@
 {
   "name": "resmed-data-mcp",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "description": "Mac Mini indexer + MCP server: archives raw ResMed AirSense CPAP data from a FlashAir-enabled SD card into SQLite, queryable over the LAN by any MCP client",
   "type": "module",
   "main": "dist/cli.js",
@@ -54,7 +54,9 @@
     "backfill": "node dist/cli.js backfill",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "scan:package": "node scripts/scan-package.js",
+    "prepublishOnly": "npm run build && npm run scan:package"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0"

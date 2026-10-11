@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { clampPollInterval, formatIntervalMs, parseDuration } from "../src/config.js";
+import fs from "node:fs";
+import { describe, expect, it, vi } from "vitest";
+import { clampPollInterval, formatIntervalMs, parseDuration, resolveConfig, DEFAULT_FLASHAIR_BASE_URL } from "../src/config.js";
 
 describe("parseDuration", () => {
   it("parses bare numbers as milliseconds", () => {
@@ -53,5 +54,21 @@ describe("formatIntervalMs", () => {
     expect(formatIntervalMs(5 * 60_000)).toBe("5m");
     expect(formatIntervalMs(30_000)).toBe("30s");
     expect(formatIntervalMs(1500)).toBe("1500ms");
+  });
+});
+
+
+describe("local FlashAir configuration", () => {
+  it("uses a generic default and preserves a configured card across package upgrades", () => {
+    const file = vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify({ flashAirBaseUrl: "http://192.0.2.25/" }));
+    const exists = vi.spyOn(fs, "existsSync").mockReturnValue(true);
+    try {
+      expect(DEFAULT_FLASHAIR_BASE_URL).toBe("http://flashair.local");
+      expect(resolveConfig({ env: { RESMED_DATA_HOME: "/tmp/resmed-config-fixture" } }).flashAirBaseUrl).toBe("http://192.0.2.25");
+      expect(resolveConfig({ env: { RESMED_DATA_HOME: "/tmp/resmed-config-fixture", RESMED_DATA_FLASHAIR_URL: "http://192.0.2.30/" } }).flashAirBaseUrl).toBe("http://192.0.2.30");
+    } finally {
+      file.mockRestore();
+      exists.mockRestore();
+    }
   });
 });

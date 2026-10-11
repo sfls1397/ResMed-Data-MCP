@@ -1,5 +1,5 @@
 {
-  "flashAirBaseUrl": "http://192.0.2.10",
+  "flashAirBaseUrl": "http://flashair.local",
   "pollInterval": "5m",
   "serverHost": "0.0.0.0",
   "serverPort": 8420
