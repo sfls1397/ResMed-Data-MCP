@@ -16,11 +16,11 @@ or `192.0.2.10`) otherwise.
 {
   "mcpServers": {
     "resmed-data": {
-      "url": "http://host.example.invalid:8420/mcp"
+      "url": "http://host.example.invalid:8420/mcp",
+      "headers": { "Authorization": "Bearer <local-keychain-token>" }
     }
   }
 }
 ```
 
-There is no authentication — this is meant to run on a trusted home LAN
-only. Don't expose port 8420 to the internet.
+Every HTTP request requires the local Keychain bearer token. Retrieve it explicitly with `resmed-data-mcp http-token`, and set the client Authorization header locally. Never put the real value in Git or Notion. Keep the server on the home LAN; do not expose port 8420 to the internet.

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { loadOrCreateHttpAuthToken } from "./mcp/httpAuth.js";
 import { getCliCommand } from "./processMode.js";
 import { resolveConfig } from "./config.js";
 import { getAppDir, getLockFilePath } from "./paths.js";
@@ -10,9 +11,16 @@ import { createSyncLock } from "./lock.js";
 import { startHttpServer } from "./mcp/server.js";
 import { packageVersion } from "./version.js";
 
+// Private config, history and sidecar files are owner-only.
+process.umask(0o077);
+
 async function main(): Promise<void> {
   const env = process.env;
   const command = getCliCommand();
+  if (command === "http-token") {
+    console.log(loadOrCreateHttpAuthToken().token);
+    return;
+  }
   const appDir = getAppDir({ env });
   ensureAppDir(appDir);
   const config = resolveConfig({ env });
@@ -53,7 +61,7 @@ async function main(): Promise<void> {
   // yet, so read-only open below never fails on a missing file.
   openDatabase(config.dbPath).close();
   const db = openDatabaseReadOnly(config.dbPath);
-  await startHttpServer({ db, host: config.serverHost, port: config.serverPort });
+  await startHttpServer({ db, host: config.serverHost, port: config.serverPort, token: loadOrCreateHttpAuthToken().token });
 }
 
 main().catch((err) => {
