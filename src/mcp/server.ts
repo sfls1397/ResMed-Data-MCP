@@ -1,4 +1,5 @@
 import http from "node:http";
+import { verifyAuthHeader } from "./httpAuth.js";
 import type { DatabaseSync } from "node:sqlite";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -39,6 +40,7 @@ export interface StartHttpServerOptions {
   db: DatabaseSync;
   host: string;
   port: number;
+  token: string;
   log?: (msg: string) => void;
 }
 
@@ -54,18 +56,24 @@ export interface StartHttpServerOptions {
  * requests silently breaks after the first.
  */
 export async function startHttpServer(options: StartHttpServerOptions): Promise<http.Server> {
+  if (!options.token) throw new Error("A nonempty HTTP bearer token is required");
   const log = options.log || ((msg: string) => console.error(msg));
 
   const httpServer = http.createServer((req, res) => {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+    if (!verifyAuthHeader(req.headers.authorization, options.token)) {
+      res.writeHead(401, { "Content-Type": "application/json", "WWW-Authenticate": "Bearer" });
+      res.end(JSON.stringify({ error: "Unauthorized: missing or invalid bearer token" }));
+      return;
+    }
+    const pathname = (req.url || "/").split("?")[0];
 
-    if (url.pathname === "/health") {
+    if (pathname === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true, version: packageVersion() }));
       return;
     }
 
-    if (url.pathname === "/mcp" || url.pathname === "/") {
+    if (pathname === "/mcp" || pathname === "/") {
       void (async () => {
         const mcpServer = createResmedServer(options.db);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -91,7 +99,8 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     res.end(JSON.stringify({ error: "not found" }));
   });
 
-  await new Promise<void>((resolve) => {
+  await new Promise<void>((resolve, reject) => {
+    httpServer.once("error", reject);
     httpServer.listen(options.port, options.host, resolve);
   });
   log(`ResMed Data MCP (v${packageVersion()}) listening on http://${options.host}:${options.port}/mcp`);

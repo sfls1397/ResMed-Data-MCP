@@ -20,8 +20,9 @@ export type DatabaseSync = DatabaseSyncType;
 const BUSY_TIMEOUT_MS = 30_000;
 
 export function openDatabase(dbPath: string): DatabaseSync {
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(dbPath);
+  if (dbPath !== ":memory:") fs.chmodSync(dbPath, 0o600);
   db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA foreign_keys = ON");

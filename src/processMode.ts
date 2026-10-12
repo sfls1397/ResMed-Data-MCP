@@ -1,6 +1,6 @@
-export type CliCommand = "indexer" | "serve" | "backfill";
+export type CliCommand = "indexer" | "serve" | "backfill" | "http-token";
 
-const VALID_COMMANDS: ReadonlySet<string> = new Set(["indexer", "serve", "backfill"]);
+const VALID_COMMANDS: ReadonlySet<string> = new Set(["indexer", "serve", "backfill", "http-token"]);
 
 /**
  * `resmed-data-mcp indexer`  -> always-on backfill + poll loop (LaunchAgent A)
