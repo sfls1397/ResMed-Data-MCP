@@ -1,9 +1,9 @@
 # ResMed-Data-MCP
 
 Archives raw data from a ResMed AirSense CPAP's SD card — read over Wi-Fi via
-a Toshiba FlashAir card — into a local SQLite database on a Mac Mini, and
-serves it read-only to any MCP client (Claude, Codex, Grok, etc.) over the
-LAN via Streamable HTTP.
+a Toshiba FlashAir card — into a local SQLite database on a Mac, and
+serves it read-only to any MCP client (Claude, Codex, and others) over the
+LAN via bearer-token-authenticated Streamable HTTP.
 
 This is a personal quantified-self data plane, not a clinical tool: it
 archives every field the device reports (AHI, leak rate, pressure, usage
@@ -28,13 +28,14 @@ works on future firmware and other ResMed models without changes.
 | Process | Role |
 | --- | --- |
 | **Indexer** (`resmed-data-mcp indexer`) | Always-on host. Polls the FlashAir on an interval (default 5m), downloads STR.edf and any new/changed DATALOG files, parses them, and writes to SQLite. |
-| **MCP server** (`resmed-data-mcp serve`, default) | Always-on read-only MCP server over Streamable HTTP. Opens the same SQLite file read-only (WAL mode lets it read while the indexer writes). |
+| **MCP server** (`resmed-data-mcp serve`, default) | Always-on read-only MCP server over Streamable HTTP, bearer token required. Opens the same SQLite file read-only (WAL mode lets it read while the indexer writes). |
 
 Both run as separate LaunchAgents (see `examples/`) so a slow FlashAir sync
 never blocks queries and a client bug never touches the data. The MCP server
 listens on `0.0.0.0:8420` by default, so it's reachable identically whether
 a client is on the same Mac or elsewhere on the LAN — every client just
-points at `http://<host>:8420/mcp`.
+points at `http://<host>:8420/mcp` and sends `Authorization: Bearer <token>`
+(see [Security](#security)).
 
 ## Data model
 
@@ -51,7 +52,7 @@ points at `http://<host>:8420/mcp`.
 - **`source_files`, `sync_runs`, `devices`** — provenance and operational
   history: what file came from where, when, and whether syncing is healthy.
 
-Event files are decoded into `session_events`. Each apnea or hypopnea row includes the pressure and leak at that minute and whether pressure rose over the next two minutes. `minute_stats` is one row per minute of pressure, leak, flow limitation, tidal volume, respiratory rate, snore, oxygen, and event counts. `night_therapy` rolls those minutes up against the night's minimum and maximum pressure.
+Event files (the EDF+ annotation channel in `DATALOG` `_EVE` / `_CSL` files) are decoded into `session_events`. Each apnea or hypopnea row includes the pressure and leak at that minute and whether pressure rose over the next two minutes. `minute_stats` is one row per minute of pressure, leak, flow limitation, tidal volume, respiratory rate, snore, oxygen, and event counts. `night_therapy` rolls those minutes up against the night's minimum and maximum pressure.
 
 No vector database: this data is fully structured and numeric (nightly
 metrics, calibrated signal samples), which SQL aggregation handles better
@@ -117,12 +118,13 @@ relocates the whole `~/.resmed-data-mcp/` directory (test/dev only).
 
 ```bash
 resmed-data-mcp backfill     # one-shot: pulls everything currently on the card
+resmed-data-mcp http-token   # creates the HTTP bearer token on first use and prints it
 ```
 
 Copy `examples/com.resmed-data-mcp.indexer.plist` and
 `examples/com.resmed-data-mcp.server.plist` into `~/Library/LaunchAgents/`,
 replacing `REPLACE_ME_WITH_NPM_BIN_DIR` and
-`REPLACE_ME` (your username) with real values, then:
+`REPLACE_ME` (your macOS username) with real values, then:
 
 ```bash
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.resmed-data-mcp.indexer.plist
@@ -132,11 +134,18 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.resmed-data-mcp.serv
 ### Point clients at it
 
 See `examples/mcp-client.json`. Any MCP client that supports an HTTP server
-entry (Claude, Codex, Grok Bot, ...) connects the same way whether it runs on
-the Mac Mini itself or another machine on the same LAN:
+entry with headers connects the same way whether it runs on the Mac that hosts
+the server or another machine on the same LAN:
 
 ```json
-{ "mcpServers": { "resmed-data": { "url": "http://<host>:8420/mcp" } } }
+{
+  "mcpServers": {
+    "resmed-data": {
+      "url": "http://<host>:8420/mcp",
+      "headers": { "Authorization": "Bearer <token from resmed-data-mcp http-token>" }
+    }
+  }
+}
 ```
 
 ## Paths
@@ -151,19 +160,15 @@ All under `~/.resmed-data-mcp/` (config cannot override this directory):
 
 ## Security
 
-No authentication — this is meant for a trusted home LAN only. Don't expose
-port 8420 to the internet (no port forwarding, no tunnel). The MCP server's
-database connection is read-only at the SQLite level, so even a buggy or
-malicious client can't write through it.
+Every HTTP request, including `/health`, needs `Authorization: Bearer <token>`;
+anything else gets `401`. The token is a random secret created on first use and
+kept in the login Keychain (service `resmed-data-mcp-http`, account
+`http-auth-token`), never in config or logs. `resmed-data-mcp http-token`
+prints it. It is still meant for a trusted home LAN: don't expose port 8420 to
+the internet (no port forwarding, no tunnel). The MCP server's database
+connection is read-only at the SQLite level, so even a buggy or malicious
+client can't write through it.
 
-## Known limitations
-
-- **EDF+ annotation signals** (the "EDF Annotations" channel, used for event
-  timestamps in some DATALOG detail files) are archived as raw bytes but not
-  decoded into structured events yet — there was no real annotation-bearing
-  file available to validate a decoder against when this was built. Decoding
-  can be added once DATALOG detail files with real annotations exist on a
-  card.
 ## License
 
 MIT
@@ -184,7 +189,10 @@ gitleaks git --log-opts=--all --config .gitleaks.toml --redact=100 --no-banner .
 npm run build && npm run scan:package
 ```
 
-Push and pull-request CI scans full fetched history and package contents.
+Before a pull request is merged, `python3 .security/local-gate.py <PR number>`
+runs Gitleaks, the production `npm audit`, offline Semgrep and the tests on the
+exact PR head and records the result as the `local-gate` status. Push and
+pull-request CI also scans full fetched history and package contents.
 The prepublishOnly lifecycle rebuilds and scans the exact npm file list.
 After a history rewrite, discard old clones and re-clone; merging old history
 can restore removed data. Releases use GitHub Release → npm OIDC.
