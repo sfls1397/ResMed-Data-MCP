@@ -1,7 +1,7 @@
 {
   "name": "resmed-data-mcp",
-  "version": "1.1.4",
-  "description": "Indexer and read-only MCP server for ResMed AirSense CPAP data: reads the SD card over Wi-Fi through a Toshiba FlashAir card, archives every EDF signal (nightly summary, per-minute therapy detail, events) in a local SQLite database, and serves it to any MCP client over bearer-token HTTP.",
+  "version": "1.1.5",
+  "description": "Indexer and read-only MCP server for ResMed AirSense CPAP data: reads the SD card over Wi-Fi through a Toshiba FlashAir card, archives every EDF signal in a local SQLite database, and serves it to any MCP client over bearer-token HTTP.",
   "type": "module",
   "main": "dist/cli.js",
   "bin": {

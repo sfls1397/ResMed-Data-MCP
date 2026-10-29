@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.5
+
+- Shorten the npm package description to fit npm's 255-character limit (1.1.4's was cut off on the registry).
+
 ## 1.1.4
 
 - Rewrite the npm package description for general users and to match what the package does.
