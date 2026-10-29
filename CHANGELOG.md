@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.4
+
+- Rewrite the npm package description for general users and to match what the package does.
+
 ## 1.1.3
 
 - Refresh dependencies within existing ranges: `@modelcontextprotocol/sdk` 1.32.2, `zod` 4.6.7 and `body-parser` 2.4.0 (high advisories GHSA-mrhx-c7xc-m3w5 and GHSA-27r3-jxmh-p828).
