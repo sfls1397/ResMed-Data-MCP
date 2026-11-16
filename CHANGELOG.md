@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.6
+
+- The HTTP server reads its bearer token from `RESMED_DATA_MCP_TOKEN` first (when set and not empty) and falls back to the Keychain item `resmed-data-mcp-http` / `http-auth-token` as before, so it can start under a secrets manager that injects the token. Nothing changes when the variable is unset.
+
 ## 1.1.5
 
 - Shorten the npm package description to fit npm's 255-character limit (1.1.4's was cut off on the registry).

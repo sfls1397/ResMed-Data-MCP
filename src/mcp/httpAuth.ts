@@ -3,6 +3,10 @@
  * (and Apple Tools): a random bearer token generated once and kept in the
  * macOS Keychain — never in a config file, the repo, or logs after the
  * one-time print.
+ *
+ * The token is read from RESMED_DATA_MCP_TOKEN first (set and non empty),
+ * so the server can start through infisical-run, which injects it into the
+ * environment; the Keychain item is the fallback, read exactly as before.
  */
 import crypto from "node:crypto";
 import { writeKeychainSecret } from "../keychainWrite.js";
@@ -10,6 +14,7 @@ import { execFileSync as defaultExecFileSync } from "node:child_process";
 
 export const KEYCHAIN_SERVICE = "resmed-data-mcp-http";
 export const KEYCHAIN_ACCOUNT = "http-auth-token";
+export const ENV_TOKEN_VAR = "RESMED_DATA_MCP_TOKEN";
 
 type Exec = typeof defaultExecFileSync;
 
@@ -26,12 +31,20 @@ export function readKeychainSecret(service: string, account: string, exec: Exec 
 }
 
 export function loadOrCreateHttpAuthToken(
-  options: { log?: (m: string) => void; forceNew?: boolean; execFileSync?: Exec; randomBytes?: typeof crypto.randomBytes } = {}
+  options: {
+    log?: (m: string) => void;
+    forceNew?: boolean;
+    execFileSync?: Exec;
+    randomBytes?: typeof crypto.randomBytes;
+    env?: NodeJS.ProcessEnv;
+  } = {}
 ): { token: string; generated: boolean } {
   const log = options.log || ((m: string) => console.error(m));
   const exec = options.execFileSync || defaultExecFileSync;
   const randomBytes = options.randomBytes || crypto.randomBytes;
   if (!options.forceNew) {
+    const fromEnv = (options.env || process.env)[ENV_TOKEN_VAR]?.trim();
+    if (fromEnv) return { token: fromEnv, generated: false };
     const existing = readKeychainSecret(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT, exec);
     if (existing) return { token: existing, generated: false };
   }
