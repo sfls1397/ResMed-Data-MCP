@@ -167,7 +167,8 @@ kept in the login Keychain (service `resmed-data-mcp-http`, account
 `RESMED_DATA_MCP_TOKEN` is set and not empty, the server uses it instead and
 leaves the Keychain alone, so a secrets manager can inject the token at start
 (for example `infisical run -- resmed-data-mcp serve`). `resmed-data-mcp http-token`
-prints the token in use. It is still meant for a trusted home LAN: don't expose port 8420 to
+always prints the Keychain token (creating it if missing), even when
+`RESMED_DATA_MCP_TOKEN` is set in the calling shell. It is still meant for a trusted home LAN: don't expose port 8420 to
 the internet (no port forwarding, no tunnel). The MCP server's database
 connection is read-only at the SQLite level, so even a buggy or malicious
 client can't write through it.

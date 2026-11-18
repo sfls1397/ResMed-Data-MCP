@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.7
+
+- `resmed-data-mcp http-token` prints only the Keychain token again (creating it if missing), even when `RESMED_DATA_MCP_TOKEN` is set in the calling shell. In 1.1.6 it printed that variable instead and skipped creating a missing Keychain item. The server still reads the variable first.
+
 ## 1.1.6
 
 - The HTTP server reads its bearer token from `RESMED_DATA_MCP_TOKEN` first (when set and not empty) and falls back to the Keychain item `resmed-data-mcp-http` / `http-auth-token` as before, so it can start under a secrets manager that injects the token. Nothing changes when the variable is unset.

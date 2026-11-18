@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { loadOrCreateHttpAuthToken } from "./mcp/httpAuth.js";
+import { loadHttpTokenForCli, loadOrCreateHttpAuthToken } from "./mcp/httpAuth.js";
 import { getCliCommand } from "./processMode.js";
 import { resolveConfig } from "./config.js";
 import { getAppDir, getLockFilePath } from "./paths.js";
@@ -18,7 +18,7 @@ async function main(): Promise<void> {
   const env = process.env;
   const command = getCliCommand();
   if (command === "http-token") {
-    console.log(loadOrCreateHttpAuthToken().token);
+    console.log(loadHttpTokenForCli());
     return;
   }
   const appDir = getAppDir({ env });

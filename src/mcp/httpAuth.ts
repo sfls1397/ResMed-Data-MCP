@@ -55,6 +55,17 @@ export function loadOrCreateHttpAuthToken(
   return { token, generated: true };
 }
 
+/**
+ * The `http-token` command's token: always the Keychain item (created on first
+ * use). An injected RESMED_DATA_MCP_TOKEN in the calling shell must not stand in
+ * for it, so the env lookup is given an empty environment.
+ */
+export function loadHttpTokenForCli(
+  options: Omit<NonNullable<Parameters<typeof loadOrCreateHttpAuthToken>[0]>, "env"> = {}
+): string {
+  return loadOrCreateHttpAuthToken({ ...options, env: {} }).token;
+}
+
 /** Constant-time check of `Authorization: Bearer <token>`. Never throws. */
 export function verifyAuthHeader(headerValue: string | string[] | undefined, expectedToken: string): boolean {
   if (typeof headerValue !== "string") return false;
