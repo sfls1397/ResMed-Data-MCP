@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest';
-import { loadOrCreateHttpAuthToken, ENV_TOKEN_VAR } from '../src/mcp/httpAuth.js';
+import { readFileSync } from 'node:fs';
+import { loadHttpTokenForCli, loadOrCreateHttpAuthToken, ENV_TOKEN_VAR } from '../src/mcp/httpAuth.js';
 
 // Fake values only. The fake exec stands in for /usr/bin/security.
 function fakeExec(keychainValue: string | null) {
@@ -45,4 +46,35 @@ it('still generates and stores a token as today when neither the variable nor th
   const r = loadOrCreateHttpAuthToken({ env: {}, execFileSync: exec, randomBytes: fixedBytes, log: () => {} });
   expect(r).toEqual({ token: '07'.repeat(32), generated: true });
   expect(calls.map(c => c[1])).toEqual(['find-generic-password', '-i']);
+});
+
+it('http-token ignores RESMED_DATA_MCP_TOKEN in process.env and prints the Keychain token', () => {
+  const saved = process.env[ENV_TOKEN_VAR];
+  process.env[ENV_TOKEN_VAR] = 'FAKE_ENV_TOKEN';
+  try {
+    const { exec, calls } = fakeExec('FAKE_KEYCHAIN_TOKEN');
+    expect(loadHttpTokenForCli({ execFileSync: exec, log: () => {} })).toBe('FAKE_KEYCHAIN_TOKEN');
+    expect(calls.map(c => c[1])).toEqual(['find-generic-password']);
+  } finally {
+    if (saved === undefined) delete process.env[ENV_TOKEN_VAR]; else process.env[ENV_TOKEN_VAR] = saved;
+  }
+});
+
+it('http-token still creates the Keychain token when it is missing, even with the variable set', () => {
+  const saved = process.env[ENV_TOKEN_VAR];
+  process.env[ENV_TOKEN_VAR] = 'FAKE_ENV_TOKEN';
+  try {
+    const { exec, calls } = fakeExec(null);
+    expect(loadHttpTokenForCli({ execFileSync: exec, randomBytes: fixedBytes, log: () => {} })).toBe('07'.repeat(32));
+    expect(calls.map(c => c[1])).toEqual(['find-generic-password', '-i']);
+  } finally {
+    if (saved === undefined) delete process.env[ENV_TOKEN_VAR]; else process.env[ENV_TOKEN_VAR] = saved;
+  }
+});
+
+it('the http-token command uses the Keychain-only loader', () => {
+  const cli = readFileSync(new URL('../src/cli.ts', import.meta.url), 'utf8');
+  const branch = cli.slice(cli.indexOf('command === "http-token"'), cli.indexOf('return;', cli.indexOf('command === "http-token"')));
+  expect(branch).toContain('loadHttpTokenForCli()');
+  expect(branch).not.toContain('loadOrCreateHttpAuthToken(');
 });
