@@ -18,16 +18,29 @@ export const ENV_TOKEN_VAR = "RESMED_DATA_MCP_TOKEN";
 
 type Exec = typeof defaultExecFileSync;
 
+/** `security find-generic-password` exits 44 when the item does not exist. */
+const SECURITY_ITEM_NOT_FOUND = 44;
+
+/**
+ * Returns the stored secret, or null only when the Keychain item does not exist
+ * (security exit 44). Any other failure (locked keychain, access denied, missing
+ * binary, or the 15 second timeout when a locked keychain waits on a prompt)
+ * throws, so a read error is never mistaken for "no token yet" and
+ * loadOrCreateHttpAuthToken never overwrites an existing item.
+ */
 export function readKeychainSecret(service: string, account: string, exec: Exec = defaultExecFileSync): string | null {
+  let out: string | Buffer;
   try {
-    const out = exec("/usr/bin/security", ["find-generic-password", "-s", service, "-a", account, "-w"], {
-      stdio: ["ignore", "pipe", "ignore"]
+    out = exec("/usr/bin/security", ["find-generic-password", "-s", service, "-a", account, "-w"], {
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 15000
     });
-    const token = out.toString("utf8").trim();
-    return token.length > 0 ? token : null;
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as { status?: unknown } | null)?.status === SECURITY_ITEM_NOT_FOUND) return null;
+    throw new Error("Keychain read failed; not generating a new token. Unlock the login Keychain and retry.");
   }
+  const token = out.toString("utf8").trim();
+  return token.length > 0 ? token : null;
 }
 
 export function loadOrCreateHttpAuthToken(

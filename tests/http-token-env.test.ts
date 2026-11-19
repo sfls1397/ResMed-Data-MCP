@@ -1,6 +1,6 @@
 import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { loadHttpTokenForCli, loadOrCreateHttpAuthToken, ENV_TOKEN_VAR } from '../src/mcp/httpAuth.js';
+import { loadHttpTokenForCli, loadOrCreateHttpAuthToken, readKeychainSecret, ENV_TOKEN_VAR } from '../src/mcp/httpAuth.js';
 
 // Fake values only. The fake exec stands in for /usr/bin/security.
 function fakeExec(keychainValue: string | null) {
@@ -8,7 +8,7 @@ function fakeExec(keychainValue: string | null) {
   const exec = ((file: string, args: string[]) => {
     calls.push([file, ...args]);
     if (args[0] === 'find-generic-password') {
-      if (keychainValue === null) throw new Error('not found');
+      if (keychainValue === null) throw Object.assign(new Error('not found'), { status: 44 });
       return Buffer.from(keychainValue + '\n');
     }
     return Buffer.from('');
@@ -77,4 +77,45 @@ it('the http-token command uses the Keychain-only loader', () => {
   const branch = cli.slice(cli.indexOf('command === "http-token"'), cli.indexOf('return;', cli.indexOf('command === "http-token"')));
   expect(branch).toContain('loadHttpTokenForCli()');
   expect(branch).not.toContain('loadOrCreateHttpAuthToken(');
+});
+
+// A fake exec whose Keychain read fails the way a locked keychain or denied access does (not exit 44).
+function failingReadExec(status: number | undefined) {
+  const calls: string[][] = [];
+  const exec = ((file: string, args: string[]) => {
+    calls.push([file, ...args]);
+    if (args[0] === 'find-generic-password') throw Object.assign(new Error('security failed'), status === undefined ? {} : { status });
+    return Buffer.from('');
+  }) as any;
+  return { exec, calls };
+}
+
+it('readKeychainSecret returns null only for exit 44 and throws on any other read error', () => {
+  expect(readKeychainSecret('s', 'a', failingReadExec(44).exec)).toBeNull();
+  for (const status of [36, 51, 1, undefined]) {
+    expect(() => readKeychainSecret('s', 'a', failingReadExec(status).exec)).toThrow(/Keychain read failed/);
+  }
+});
+
+it('a Keychain read error never generates or overwrites a token (server start and http-token)', () => {
+  for (const load of [
+    (exec: any) => loadOrCreateHttpAuthToken({ env: {}, execFileSync: exec, randomBytes: fixedBytes, log: () => {} }),
+    (exec: any) => loadHttpTokenForCli({ execFileSync: exec, randomBytes: fixedBytes, log: () => {} })
+  ]) {
+    const { exec, calls } = failingReadExec(36);
+    expect(() => load(exec)).toThrow(/Keychain read failed/);
+    expect(calls.map(c => c[1])).toEqual(['find-generic-password']);
+  }
+});
+
+it('the read error message carries no credential values', () => {
+  const { exec } = failingReadExec(36);
+  try { readKeychainSecret('s', 'a', exec); } catch (e) { expect(String((e as Error).message)).not.toMatch(/FAKE|-w/); }
+});
+
+it('the Keychain read has a timeout, so a locked keychain waiting on a prompt fails instead of hanging', () => {
+  let opts: any;
+  const exec = ((_f: string, _a: string[], o: any) => { opts = o; throw Object.assign(new Error('timed out'), { code: 'ETIMEDOUT' }); }) as any;
+  expect(() => readKeychainSecret('s', 'a', exec)).toThrow(/Keychain read failed/);
+  expect(opts.timeout).toBe(15000);
 });
