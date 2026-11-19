@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.8
+
+- A Keychain read failure other than "item not found" (a locked keychain, denied access) now stops `serve` and `http-token` with an error instead of being treated as a missing token. Before, it would generate a new token and overwrite the stored one. Only `security` exit 44 (item not found) creates a token.
+
 ## 1.1.7
 
 - `resmed-data-mcp http-token` prints only the Keychain token again (creating it if missing), even when `RESMED_DATA_MCP_TOKEN` is set in the calling shell. In 1.1.6 it printed that variable instead and skipped creating a missing Keychain item. The server still reads the variable first.
