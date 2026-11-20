@@ -72,7 +72,7 @@ False alarms must be zero, so a check that flags correct code is tuned or droppe
 
 ## Comments in today's code
 
-Measured on main at 7011f2b with this check: 261 comment lines in 39 files (TypeScript 200, Python 51 of which 23 are docstrings, shell 9, JavaScript 1). Five lines name a PR, a date or an incident; none names Peter. `python3 .security/lint.py counts --folders` prints this table.
+Measured on main at 7011f2b with this check: 261 comment lines in 39 files (TypeScript 200, Python 51 of which 23 are docstrings, shell 9, JavaScript 1). A handful of lines name a PR, a date or an incident; none names Peter. `python3 .security/lint.py counts --folders` prints this table.
 
 | Folder | Files | Lines |
 |---|---|---|

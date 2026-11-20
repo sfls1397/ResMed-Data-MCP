@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -19,6 +19,11 @@ const setup = [
   "tsconfig.json",
 ];
 const timeout = 180_000;
+const created: string[] = [];
+
+afterAll(() => {
+  for (const dir of created) fs.rmSync(dir, { recursive: true, force: true });
+});
 
 function git(dir: string, ...args: string[]): string {
   const run = spawnSync(
@@ -63,6 +68,7 @@ const legacy = {
 
 function repo(): { dir: string; base: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-gate-"));
+  created.push(dir);
   git(dir, "init", "-q", "-b", "main");
   for (const name of setup) write(dir, { [name]: fs.readFileSync(path.join(root, name), "utf8") });
   commit(dir, legacy, "base");
