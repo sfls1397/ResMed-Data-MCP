@@ -58,8 +58,8 @@ def exceptions(policy, kind):
     return accepted
 
 
-def audit(root, policy):
-    result = command(['npm', 'audit', '--omit=dev', '--audit-level=high', '--json'], root)
+def audit(root, policy, dev=False):
+    result = command(['npm', 'audit'] + ([] if dev else ['--omit=dev']) + ['--audit-level=high', '--json'], root)
     data = json.loads(result.stdout)
     if data.get('error') or result.returncode not in (0, 1) or 'vulnerabilities' not in data:
         raise RuntimeError('npm audit could not complete; check registry connectivity')
@@ -77,7 +77,7 @@ def audit(root, policy):
             blocked += 1
     if blocked:
         raise RuntimeError('New or changed high/critical dependency findings block this gate')
-    print('npm audit gate PASS (production dependencies; high threshold)')
+    print('npm audit gate PASS (%s dependencies; high threshold)' % ('lint tool' if dev else 'production'))
 
 
 def semgrep(root, policy, targets=None):
@@ -148,6 +148,8 @@ def full():
                 shutil.copyfile(source, target)
         reviewed = policy(snapshot)
         audit(snapshot, reviewed)
+        if (snapshot / '.lint/package-lock.json').is_file():
+            audit(snapshot / '.lint', reviewed, dev=True)
         normalize_parser(snapshot)
         semgrep(snapshot, reviewed)
         language_scan(snapshot)
@@ -160,6 +162,7 @@ def staged():
         snapshot = Path(directory)
         # Use the index for tools, configuration, package metadata and candidate source.
         required = ['.semgrepignore', 'package.json', 'package-lock.json']
+        required += [x for x in ['.lint/package.json', '.lint/package-lock.json'] if git(['ls-files', '-z', x])]
         tooling = [os.fsdecode(p) for p in git(['ls-files', '-z', '.security']).split(b'\0') if p]
         for name in dict.fromkeys(changed + required + tooling):
             path = Path(name)
@@ -180,6 +183,8 @@ def staged():
         reviewed = policy(snapshot)
         if any(x in changed for x in ['package.json', 'package-lock.json', '.security/policy.json']):
             audit(snapshot, reviewed)
+        if (snapshot / '.lint/package-lock.json').is_file() and any(x in changed for x in ['.lint/package.json', '.lint/package-lock.json', '.security/policy.json']):
+            audit(snapshot / '.lint', reviewed, dev=True)
         # Include tests and scripts; only generated/vendor paths are ignored.
         targets = [x for x in changed if (snapshot / x).is_file()
                    and Path(x).suffix in ('.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.py')]
