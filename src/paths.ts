@@ -11,13 +11,6 @@ export interface PathOptions {
   homedir?: () => string;
 }
 
-/**
- * Directory that holds config.json, data.sqlite, and indexer.lock.
- * Always under the user home directory in production. config.json cannot
- * override this path (treated as data, not instructions).
- *
- * `RESMED_DATA_HOME` is a test/dev override only.
- */
 export function getAppDir(options: PathOptions = {}): string {
   const env = options.env || process.env;
   if (env.RESMED_DATA_HOME && env.RESMED_DATA_HOME.trim()) {

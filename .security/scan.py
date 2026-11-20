@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Repository gates. Findings are summarized without source or secret values."""
 import importlib.util
 import datetime
 import hashlib
@@ -26,7 +25,6 @@ def git(args):
 
 
 def audit_key(name, item, lock):
-    # Pin every affected installed version and advisory chain, not just its name.
     value = {'package': name, 'severity': item['severity'],
              'range': item.get('range'), 'via': item.get('via', []),
              'installed': {p: lock.get('packages', {}).get(p, {}).get('version')
@@ -86,7 +84,6 @@ def semgrep(root, policy, targets=None):
     args = ['semgrep', 'scan', '--config', '.security/semgrep.yml', '--error',
             '--strict', '--metrics', 'off', '--disable-version-check', '--disable-nosem',
             '--max-target-bytes', '0', '--timeout', '0', '--json']
-    # Explicit staged targets avoid scanning an unstaged worktree or unrelated files.
     if targets is not None and not targets:
         print('Semgrep: no staged source files')
         return
@@ -114,9 +111,6 @@ def policy(root):
 
 
 def normalize_parser(root):
-    # Semgrep 1.180.0 misparses this valid TS regex as an HTML comment.
-    # Rewrite only its spelling in the disposable scan copy, with identical
-    # pattern and flags. Runtime/index bytes are never modified.
     p = root / 'src/core/sonos.ts'
     if p.exists():
         text = p.read_text()
@@ -160,7 +154,6 @@ def staged():
                                          '--diff-filter=ACMR', '-z']).split(b'\0') if p]
     with tempfile.TemporaryDirectory(prefix='repo-security-') as directory:
         snapshot = Path(directory)
-        # Use the index for tools, configuration, package metadata and candidate source.
         required = ['.semgrepignore', 'package.json', 'package-lock.json']
         required += [x for x in ['.lint/package.json', '.lint/package-lock.json'] if git(['ls-files', '-z', x])]
         tooling = [os.fsdecode(p) for p in git(['ls-files', '-z', '.security']).split(b'\0') if p]
@@ -185,7 +178,6 @@ def staged():
             audit(snapshot, reviewed)
         if (snapshot / '.lint/package-lock.json').is_file() and any(x in changed for x in ['.lint/package.json', '.lint/package-lock.json', '.security/policy.json']):
             audit(snapshot / '.lint', reviewed, dev=True)
-        # Include tests and scripts; only generated/vendor paths are ignored.
         targets = [x for x in changed if (snapshot / x).is_file()
                    and Path(x).suffix in ('.js', '.cjs', '.mjs', '.jsx', '.ts', '.tsx', '.py')]
         normalize_parser(snapshot)
@@ -208,7 +200,6 @@ if __name__ == '__main__':
     try:
         main()
     except (RuntimeError, OSError, ValueError, KeyError, IndexError):
-        # Do not echo arbitrary tool errors, source snippets, private paths or config.
         print('Security gate BLOCKED: finding, expired policy, missing tool, or incomplete scan. '
               'Review masked findings above and .security/FINDINGS.md; rerun after repair.', file=sys.stderr)
         sys.exit(1)

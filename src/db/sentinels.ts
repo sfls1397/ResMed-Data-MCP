@@ -1,7 +1,6 @@
 import type { DatabaseSync } from "./open.js";
 import { quoteIdent, tableColumns } from "./open.js";
 
-/** ResMed writes -1 for "not measured" on SpO2 and duration, and -0.1 for AHI when the night had no session. */
 export function nightlyMeasuredValue(column: string, value: number): number | null {
   if (!Number.isFinite(value)) {
     return null;
@@ -21,7 +20,6 @@ export function nightlyMeasuredValue(column: string, value: number): number | nu
   return value;
 }
 
-/** High-resolution oximetry uses the same -1 filler when the sensor is not measuring. */
 export function isUnmeasuredSample(label: string, value: number): boolean {
   return (label.startsWith("SpO2") || label.startsWith("Pulse")) && value === -1;
 }

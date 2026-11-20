@@ -32,12 +32,6 @@ function normalizeTimeRaw(timeRaw: string): string | null {
   return `${hh}:${mm}:${ss}`;
 }
 
-/**
- * Best-effort start timestamp. Prefers the EDF+ "Startdate DD-MMM-YYYY"
- * convention embedded in patient/recording id fields (full 4-digit year)
- * over the header's own "dd.mm.yy" field, which needs a 2-digit-year
- * heuristic (per the EDF spec: yy < 85 => 20yy, else 19yy).
- */
 function resolveStartTimestamp(
   patientId: string,
   recordingId: string,
@@ -89,16 +83,6 @@ export function parseEdfHeader(buf: Buffer): EdfHeader {
   };
 }
 
-/**
- * Parses a standard EDF / EDF+ file: the fixed 256-byte main header, the
- * column-major per-signal header block, then every data record.
- *
- * Numeric signals keep their raw digital (int16) samples — see
- * `digitalToPhysical` in ./types.ts to scale them. A signal labeled
- * "EDF Annotations" (the EDF+ convention) is not scaled; its raw bytes
- * (TAL-encoded) are kept as-is rather than guessed at, since annotation
- * decoding hasn't been validated against a real ResMed DATALOG file yet.
- */
 export function parseEdf(buf: Buffer): ParsedEdf {
   const header = parseEdfHeader(buf);
   const ns = header.numSignals;
@@ -130,7 +114,7 @@ export function parseEdf(buf: Buffer): ParsedEdf {
   offset += 80 * ns;
   const samplesPerRecords = readAsciiArray(buf, offset, 8, ns).map((v) => parseNumber(v));
   offset += 8 * ns;
-  offset += 32 * ns; // per-signal reserved block
+  offset += 32 * ns;
 
   const signalHeaders: EdfSignalHeader[] = [];
   for (let i = 0; i < ns; i++) {

@@ -9,8 +9,6 @@ import { nightlyMeasuredValue } from "./sentinels.js";
 import { nightDateFromPath, rebuildNightDetailInTransaction, refreshNightTherapy } from "./sessions.js";
 
 export type SourceFileType = "str_summary" | "datalog";
-// Version 2 re-ingests files written by the original implementation, which
-// could retain a new content hash after a failed transaction.
 export const CURRENT_INGEST_VERSION = 2;
 
 export interface IngestFileInput {
@@ -31,7 +29,6 @@ function sha256Hex(buf: Buffer): string {
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
-/** Days-since-Unix-epoch (as used by the "Date" signal in STR.edf) -> "YYYY-MM-DD". */
 export function epochDaysToDateString(days: number): string | null {
   if (!Number.isFinite(days) || days <= 0 || days > 100000) {
     return null;
@@ -41,16 +38,6 @@ export function epochDaysToDateString(days: number): string | null {
   return iso.slice(0, 10);
 }
 
-/**
- * Ingests one downloaded EDF file (STR.edf or a DATALOG detail file) into
- * the generic edf_signals / edf_signal_records tables, and — for STR.edf —
- * also flattens every numeric signal into a wide `nightly_summary` row per
- * date, keyed off the file's own "Date" signal.
- *
- * Skips re-parsing when the file's content hash matches what's already
- * stored (STR.edf is re-downloaded whole every sync cycle but usually
- * hasn't changed since the last one).
- */
 export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestFileResult {
   const contentSha256 = sha256Hex(input.rawBytes);
   const now = new Date().toISOString();
@@ -161,9 +148,6 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
 
     if (input.fileType === "str_summary" && recordDates.size > 0) {
       writeNightlySummary(db, sourceFileId, parsed, recordDates, previousSummaryColumns, now);
-      // STR.edf is the authority for AHI and pressure settings, while the
-      // DATALOG-derived rows may already exist from an earlier sync. Keep
-      // those joined therapy rows current even when no detail file changed.
       for (const nightDate of new Set(recordDates.values())) {
         refreshNightTherapy(db, nightDate);
       }
@@ -172,8 +156,6 @@ export function ingestEdfFile(db: DatabaseSync, input: IngestFileInput): IngestF
     if (input.fileType === "datalog") {
       const night = nightDateFromPath(input.remotePath);
       if (night) {
-        // Keep source data and its derived view in the same transaction: a
-        // failed rollup leaves the prior source and rollup intact for retry.
         rebuildNightDetailInTransaction(db, night);
       }
     }
@@ -285,9 +267,6 @@ function writeNightlySummary(
   previousColumns: string[],
   now: string
 ): void {
-  // Exclude the "Date" signal itself: it's already the nightly_summary
-  // primary key (`date`), and SQLite treats column names case-insensitively,
-  // so "Date" would collide with "date" in ALTER TABLE / CREATE TABLE.
   const numericSignals = parsed.signals.filter((s) => s.numericRecords && s.header.label !== "Date");
   const columns = numericSignals.map((s) => sanitizeColumnName(s.header.label));
   for (const col of columns) {

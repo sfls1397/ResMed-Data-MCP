@@ -11,8 +11,7 @@ describe("sanitizeColumnName", () => {
     expect(sanitizeColumnName("95thPercentile")).toBe("c_95thPercentile");
   });
 
-  it("avoids case-insensitive collisions with reserved nightly_summary columns", () => {
-    // SQLite compares column names case-insensitively: "Date" would collide with "date".
+  it("avoids case-insensitive collisions with reserved nightly_summary columns, since SQLite would treat \"Date\" and \"date\" as the same column", () => {
     expect(sanitizeColumnName("Date")).toBe("sig_Date");
     expect(sanitizeColumnName("UPDATED_AT")).toBe("sig_UPDATED_AT");
   });

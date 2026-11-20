@@ -179,9 +179,6 @@ export const SCHEMA_STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_source_files_type ON source_files(file_type)`
 ];
 
-/** Turns an EDF signal label like "S.C.StartPress" or "Leak.95" into a safe SQLite column name. */
-/** Fixed nightly_summary columns. SQLite compares column names case-insensitively, so a
- *  sanitized signal label that only differs by case from one of these would collide. */
 const RESERVED_NIGHTLY_SUMMARY_COLUMNS = new Set(["date", "source_file_id", "record_index", "updated_at"]);
 
 export function sanitizeColumnName(label: string): string {
