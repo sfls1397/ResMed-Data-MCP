@@ -12,7 +12,6 @@ export interface RunIndexerDaemonOptions {
   config: ResolvedConfig;
   lockFile: string;
   log?: (msg: string) => void;
-  /** Test hook: run exactly one cycle instead of looping forever. */
   once?: boolean;
 }
 
@@ -66,12 +65,6 @@ export async function runSyncCycle(
   }
 }
 
-/**
- * Detect incomplete derived data by the actual logical night dates, rather
- * than by the first eight characters after /DATALOG/. Older archives use a
- * year directory there, so the SQL substring collapses every night in a year
- * into one and can hide a partial migration.
- */
 export function needsDetailRollup(db: DatabaseSync): { needed: boolean; datalogNightCount: number } {
   const paths = db
     .prepare(`SELECT DISTINCT remote_path FROM source_files WHERE file_type = 'datalog' AND remote_path LIKE '%/DATALOG/%'`)
@@ -88,18 +81,11 @@ export function needsDetailRollup(db: DatabaseSync): { needed: boolean; datalogN
   const minuteDates = dates("minute_stats");
   const therapyDates = dates("night_therapy");
   const hasMissingSessions = [...datalogDates].some((date) => !sessionDates.has(date));
-  // Nights that contain only annotations legitimately have no signal/hour
-  // statistics, so compare those two derived tables only to each other.
   const hasMissingHours = [...signalDates].some((date) => !hourDates.has(date));
   const hasMissingTherapy = [...minuteDates].some((date) => !therapyDates.has(date));
   return { needed: hasMissingSessions || hasMissingHours || hasMissingTherapy, datalogNightCount: datalogDates.size };
 }
 
-/**
- * Always-on host: acquires indexer.lock, backfills/syncs on the configured
- * interval, never exits on its own (this is the process launchd's
- * KeepAlive+RunAtLoad LaunchAgent runs).
- */
 export async function runIndexerDaemon(options: RunIndexerDaemonOptions): Promise<void> {
   const log = options.log || ((msg: string) => console.error(msg));
   const lock = createSyncLock({ lockFile: options.lockFile, log });
@@ -110,10 +96,6 @@ export async function runIndexerDaemon(options: RunIndexerDaemonOptions): Promis
       return;
     }
     try {
-      // The rollup rebuilds night after night back to back, which starves any
-      // other writer's busy_timeout. Run it under the same lock as a sync so a
-      // concurrent backfill can't collide with it; if another process held the
-      // lock at startup, the next tick that gets it does the check.
       if (!rollupChecked) {
         const rollupCheck = needsDetailRollup(options.db);
         if (rollupCheck.needed) {
@@ -136,9 +118,6 @@ export async function runIndexerDaemon(options: RunIndexerDaemonOptions): Promis
   }
 
   log(`Indexer running. Poll interval: ${options.config.pollIntervalHuman}`);
-  // Intentionally not unref'd: this timer is what keeps the process alive
-  // between cycles. The process exits only when killed (launchd's
-  // KeepAlive then restarts it).
   setInterval(() => {
     void tick();
   }, options.config.pollIntervalMs);

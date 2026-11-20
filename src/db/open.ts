@@ -4,19 +4,11 @@ import path from "node:path";
 import type { DatabaseSync as DatabaseSyncType } from "node:sqlite";
 import { SCHEMA_STATEMENTS } from "./schema.js";
 
-// A static `import { DatabaseSync } from "node:sqlite"` breaks under
-// vite/vitest today: node:sqlite is new enough that vite's own builtin-module
-// list doesn't recognize it yet, and it tries (and fails) to resolve it as a
-// package. Routing through Node's own require sidesteps that entirely and
-// behaves identically under plain Node.
 const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as {
   DatabaseSync: typeof DatabaseSyncType;
 };
 export type DatabaseSync = DatabaseSyncType;
 
-// The indexer, a manual backfill, and the server's startup schema check can
-// all write. Wait out another process's short transaction instead of failing
-// immediately with "database is locked".
 const BUSY_TIMEOUT_MS = 30_000;
 
 export function openDatabase(dbPath: string): DatabaseSync {
@@ -29,7 +21,6 @@ export function openDatabase(dbPath: string): DatabaseSync {
   for (const statement of SCHEMA_STATEMENTS) {
     db.exec(statement);
   }
-  // Keep existing databases compatible with ingest-format upgrades.
   ensureColumn(db, "source_files", "ingest_version", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "session_events", "press_at_event", "REAL");
   ensureColumn(db, "session_events", "leak_at_event", "REAL");
@@ -38,7 +29,6 @@ export function openDatabase(dbPath: string): DatabaseSync {
   return db;
 }
 
-/** Read-only handle for the MCP server: same file, WAL lets it read while the indexer writes. */
 export function openDatabaseReadOnly(dbPath: string): DatabaseSync {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);

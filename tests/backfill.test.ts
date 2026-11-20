@@ -15,7 +15,6 @@ function identification(software: string, dataVersion: number): string {
   });
 }
 
-/** A card that only serves Identification.json; STR.edf and DATALOG fail and are recorded as sync errors. */
 function cardWith(json: string): FlashAirClient {
   return {
     async getFile(remotePath: string) {

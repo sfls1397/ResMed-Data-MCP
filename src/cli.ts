@@ -11,7 +11,6 @@ import { createSyncLock } from "./lock.js";
 import { startHttpServer } from "./mcp/server.js";
 import { packageVersion } from "./version.js";
 
-// Private config, history and sidecar files are owner-only.
 process.umask(0o077);
 
 async function main(): Promise<void> {
@@ -34,8 +33,6 @@ async function main(): Promise<void> {
 
   if (command === "backfill") {
     console.error(`resmed-data-mcp backfill v${packageVersion()} — FlashAir: ${config.flashAirBaseUrl}`);
-    // Share the indexer's lock so a manual backfill never writes alongside a
-    // running indexer's sync or detail rollup.
     const lock = createSyncLock({ lockFile: getLockFilePath({ env }) });
     if (!lock.acquire()) {
       console.error("The indexer is already syncing; it will pick up the card's files. Try again later.");
@@ -55,10 +52,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  // serve (default)
   console.error(`resmed-data-mcp serve v${packageVersion()} — DB: ${config.dbPath}`);
-  // Ensure the DB file and base schema exist even if the indexer hasn't run
-  // yet, so read-only open below never fails on a missing file.
   openDatabase(config.dbPath).close();
   const db = openDatabaseReadOnly(config.dbPath);
   await startHttpServer({ db, host: config.serverHost, port: config.serverPort, token: loadOrCreateHttpAuthToken().token });

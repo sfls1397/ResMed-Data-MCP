@@ -9,7 +9,6 @@ function pad(text: string, length: number): string {
   return text.padEnd(length, " ");
 }
 
-/** Builds a minimal, spec-compliant EDF buffer: 2 numeric signals, 2 data records. */
 function buildSyntheticEdf(): Buffer {
   const ns = 2;
   const headerBytes = 256 + ns * 256;
@@ -43,8 +42,7 @@ function buildSyntheticEdf(): Buffer {
     "latin1"
   );
 
-  // Record 0: SigA=[500] (digital), SigB=[100, -100]; Record 1: SigA=[1000], SigB=[500, -500]
-  const record0 = Buffer.alloc(2 * 2 + 2); // SigA:1 sample, SigB:2 samples => 3 int16 = 6 bytes
+  const record0 = Buffer.alloc(2 * 2 + 2);
   record0.writeInt16LE(500, 0);
   record0.writeInt16LE(100, 2);
   record0.writeInt16LE(-100, 4);
@@ -86,9 +84,7 @@ describe("parseEdf", () => {
   });
 
   it("scales digital to physical correctly", () => {
-    // SigA: digital 0..1000 -> physical 0..100, so 500 -> 50.
     expect(digitalToPhysical(parsed.signals[0].header, 500)).toBeCloseTo(50);
-    // SigB: digital -500..500 -> physical -50..50, so 100 -> 10.
     expect(digitalToPhysical(parsed.signals[1].header, 100)).toBeCloseTo(10);
   });
 

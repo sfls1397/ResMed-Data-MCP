@@ -1,13 +1,5 @@
 import { type FlashAirEntry } from "./types.js";
 
-/**
- * Decode FAT-packed date/time fields, as returned by FlashAir's
- * WLANSD_FILELIST listing, into an ISO 8601 string. Returns null for the
- * documented "unknown" sentinel (0/0).
- *
- * DATE: bits 15-9 year-1980, bits 8-5 month, bits 4-0 day.
- * TIME: bits 15-11 hour, bits 10-5 minute, bits 4-0 (seconds / 2).
- */
 export function decodeFatDateTime(date: number, time: number): string | null {
   if (!Number.isInteger(date) || !Number.isInteger(time) || date === 0) {
     return null;
@@ -51,11 +43,6 @@ function parseFileListLine(line: string, requestedDir: string): FlashAirEntry | 
 export interface FlashAirClientOptions {
   baseUrl: string;
   fetchFn?: typeof fetch;
-  /**
-   * Inactivity deadline. The timer starts at the request and resets each time
-   * response bytes arrive, so a slow FlashAir transfer is allowed to finish
-   * and a stalled socket still gets cut off.
-   */
   timeoutMs?: number;
   maxAttempts?: number;
   retryDelayMs?: number;
@@ -63,7 +50,6 @@ export interface FlashAirClientOptions {
 
 export class FlashAirError extends Error {}
 
-/** Silence longer than this means the card stalled, not that the file is large. */
 const DEFAULT_INACTIVITY_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 1_000;
@@ -143,7 +129,6 @@ export class FlashAirClient {
     throw lastError;
   }
 
-  /** List a directory via command.cgi?op=100. `dir` must start with "/". */
   async listDirectory(dir: string): Promise<FlashAirEntry[]> {
     const normalizedDir = dir.startsWith("/") ? dir : `/${dir}`;
     const text = await this.request(
@@ -164,7 +149,6 @@ export class FlashAirClient {
     return entries;
   }
 
-  /** Download a file's full contents by its absolute card path. */
   async getFile(filePath: string): Promise<Buffer> {
     const normalized = filePath.startsWith("/") ? filePath : `/${filePath}`;
     return this.request(normalized, async (response, touch) => {

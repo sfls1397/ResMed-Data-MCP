@@ -2,7 +2,6 @@ import { it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { loadHttpTokenForCli, loadOrCreateHttpAuthToken, readKeychainSecret, ENV_TOKEN_VAR } from '../src/mcp/httpAuth.js';
 
-// Fake values only. The fake exec stands in for /usr/bin/security.
 function fakeExec(keychainValue: string | null) {
   const calls: string[][] = [];
   const exec = ((file: string, args: string[]) => {
@@ -79,7 +78,6 @@ it('the http-token command uses the Keychain-only loader', () => {
   expect(branch).not.toContain('loadOrCreateHttpAuthToken(');
 });
 
-// A fake exec whose Keychain read fails the way a locked keychain or denied access does (not exit 44).
 function failingReadExec(status: number | undefined) {
   const calls: string[][] = [];
   const exec = ((file: string, args: string[]) => {

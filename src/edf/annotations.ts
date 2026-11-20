@@ -4,7 +4,6 @@ export interface ParsedAnnotation {
   text: string;
 }
 
-/** Decode one EDF+ annotation record (TAL). Empty time-keeping entries are skipped. */
 export function parseAnnotations(raw: Uint8Array): ParsedAnnotation[] {
   const bytes = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
   const out: ParsedAnnotation[] = [];

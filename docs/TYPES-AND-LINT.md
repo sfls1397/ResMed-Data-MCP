@@ -1,6 +1,6 @@
 # Types and strict lint
 
-Build steps 3 and 4 of the development process plan (D16, D19), copied from the Toolbox's `docs/TYPES-AND-LINT.md` and its `.security/lint.py`. Whole kinds of mistakes fail in seconds, before any test runs, and no new code comment lands. Lauren Tan: "lint rules, type systems, compilers" come first, and "start with a lint rule to prevent new occurrences of anti-patterns and then clean up those old patterns as well". Comments "go stale easily", so they are banned by a lint rule. This change is the rule only; cleaning the comments that exist today is the next job.
+Build steps 3 and 4 of the development process plan (D16, D19), copied from the Toolbox's `docs/TYPES-AND-LINT.md` and its `.security/lint.py`. Whole kinds of mistakes fail in seconds, before any test runs, and no new code comment lands. Lauren Tan: "lint rules, type systems, compilers" come first, and "start with a lint rule to prevent new occurrences of anti-patterns and then clean up those old patterns as well". Comments "go stale easily", so they are banned by a lint rule. The rule landed first and the cleanup followed: no code comment is left, and the reasons that sat in them live in [DESIGN-NOTES.md](DESIGN-NOTES.md) or in test names.
 
 ## What runs
 
@@ -21,7 +21,7 @@ Install or update the tools with `bash .cursor/install-lint.sh`. They live in `~
 
 ## The ratchet
 
-Each finding is keyed by its tool, rule, file and a hash of its line's text, so moving code does not change it. `.lint/baseline.json` holds today's 261 comment lines and nothing else: every other tool finds nothing in today's code. It only shrinks:
+Each finding is keyed by its tool, rule, file and a hash of its line's text, so moving code does not change it. `.lint/baseline.json` holds no findings: the 261 comment lines it first held are cleaned out and every other tool finds nothing. It only shrinks, and a baseline that gains an entry fails:
 
 - A change fails on a finding absent from both the baseline and the PR base, including indirect breakage in untouched files. Editing a finding's line changes its key. A renamed file keeps its old findings.
 - A finding already on the PR base is a warning, even in a touched file: a merge resolution must not be blamed for main's existing finding. Counts matter: one existing occurrence does not excuse a second.
@@ -43,7 +43,7 @@ Measured on main at 7011f2b with each tool first run at its widest setting, then
 | Pyright | 18 in standard mode, 337 in strict mode | 0 |
 | Imports | no rule widened | 0 |
 | Suppressions | none exist | 0 |
-| Comments | not run before | 261 (the baseline) |
+| Comments | not run before | 261 (the baseline, since cleaned to 0) |
 
 ## Rules dropped, and why
 
@@ -70,9 +70,9 @@ False alarms must be zero, so a check that flags correct code is tuned or droppe
 - Comments a tool needs in order to work: Python's encoding line, ShellCheck's `shell=`, `source=` and `source-path=` directives, TypeScript's `/// <reference ... />` and `// @ts-check`, and Vitest's `@vitest-environment` docblock. Nothing that turns a checker off qualifies: those are the suppression check's findings, counted once.
 - A Python docstring the program reads: a module docstring in a file that uses `__doc__`, and a function or class docstring read as `name.__doc__` (`.security/lint.py` prints its own).
 
-## Comments in today's code
+## Comments before the cleanup
 
-Measured on main at 7011f2b with this check: 261 comment lines in 39 files (TypeScript 200, Python 51 of which 23 are docstrings, shell 9, JavaScript 1). A handful of lines name a PR, a date or an incident; none names Peter. `python3 .security/lint.py counts --folders` prints this table.
+Cleaned out in one pass; the table is the count that was removed. Measured on main at 7011f2b with this check: 261 comment lines in 39 files (TypeScript 200, Python 51 of which 23 are docstrings, shell 9, JavaScript 1). A handful of lines name a PR, a date or an incident; none names Peter. `python3 .security/lint.py counts --folders` prints this table.
 
 | Folder | Files | Lines |
 |---|---|---|
@@ -91,9 +91,9 @@ Measured on main at 7011f2b with this check: 261 comment lines in 39 files (Type
 
 The most: `src/mcp/httpAuth.ts` 24, `src/db/ingest.ts` 21, `src/indexer/daemon.ts` 21, `src/edf/parse.ts` 17, `src/flashair/client.ts` 16, `.security/local-gate.py` 15.
 
-## The cleanup plan
+## The cleanup plan (done)
 
-No comment is deleted until its "why" lives where it belongs (D19): a better name, a test named for the failure it prevents, or the doc or commit message that owns it. One job per part, on a mid tier model, each part after the one before merges. Run `python3 .security/lint.py prune --resolved-only` after each part so the baseline loses only what is resolved, and prove no behavior changed with identical syntax trees (compare the parsed trees of each changed file before and after, ignoring comments) plus the recorded gate.
+One job removed all 261 lines in one PR instead of the three parts below. The method held: no comment is deleted until its "why" lives where it belongs (D19): a better name, a test named for the failure it prevents, or the doc or commit message that owns it. One job per part, on a mid tier model, each part after the one before merges. Run `python3 .security/lint.py prune --resolved-only` after each part so the baseline loses only what is resolved, and prove no behavior changed with identical syntax trees (compare the parsed trees of each changed file before and after, ignoring comments) plus the recorded gate.
 
 | Part | Files | Lines | Why this order |
 |---|---|---|---|

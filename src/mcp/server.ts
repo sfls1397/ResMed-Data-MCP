@@ -44,17 +44,6 @@ export interface StartHttpServerOptions {
   log?: (msg: string) => void;
 }
 
-/**
- * Read-only MCP over Streamable HTTP, stateless (no session tracking — every
- * request is independent). This is what makes the server reachable
- * uniformly whether a client is on this machine or elsewhere on the LAN:
- * every client just points at http://<host>:<port>/mcp.
- *
- * Per the SDK's own stateless example, a fresh Server + transport pair is
- * created for every POST: a StreamableHTTPServerTransport is single-use in
- * stateless mode (sessionIdGenerator: undefined) — reusing one across
- * requests silently breaks after the first.
- */
 export async function startHttpServer(options: StartHttpServerOptions): Promise<http.Server> {
   if (!options.token) throw new Error("A nonempty HTTP bearer token is required");
   const log = options.log || ((msg: string) => console.error(msg));

@@ -1,13 +1,10 @@
 import fs from "node:fs";
 import { getConfigPath, getDbPath } from "./paths.js";
 
-/** Product default. Matches "every 5 minutes" as discussed with the user. */
 export const DEFAULT_POLL_INTERVAL_MS = 5 * 60 * 1000;
 
-/** Documented floor: 30 seconds. Below this the FlashAir just can't keep up. */
 export const MIN_POLL_INTERVAL_MS = 30 * 1000;
 
-/** Documented ceiling: 1 hour. This is nightly data; there's no case for longer. */
 export const MAX_POLL_INTERVAL_MS = 60 * 60 * 1000;
 
 export const DEFAULT_FLASHAIR_BASE_URL = "http://flashair.local";
@@ -161,10 +158,6 @@ export interface ResolvedConfig {
   serverPort: number;
 }
 
-/**
- * Precedence (highest wins): env var > config.json > product default.
- * pollInterval is clamped to [30s, 1h].
- */
 export function resolveConfig(
   options: { env?: NodeJS.ProcessEnv; warn?: (msg: string) => void } = {}
 ): ResolvedConfig {

@@ -45,8 +45,6 @@ async function syncDeviceIdentification(
       return;
     }
     const now = new Date().toISOString();
-    // Firmware updates change the software/config/data-version identifiers on
-    // the same device, so refresh every parsed column, not just raw_json.
     db.prepare(
       `INSERT INTO devices
          (universal_identifier, serial_number, product_name, product_code, hardware_identifier,
@@ -83,7 +81,6 @@ async function syncDeviceIdentification(
   }
 }
 
-/** Skip re-downloading a DATALOG file whose metadata and ingest format match what's stored. */
 function isUnchanged(
   db: DatabaseSync,
   remotePath: string,
@@ -109,8 +106,6 @@ export async function syncOnce(
 
   await syncDeviceIdentification(db, client, log);
 
-  // STR.edf: small, appended-to daily. Always re-download; ingestEdfFile skips
-  // re-parsing itself via content hash when nothing actually changed.
   try {
     result.filesScanned += 1;
     const bytes = await client.getFile("/STR.edf");
@@ -135,7 +130,6 @@ export async function syncOnce(
     log(`Error syncing /STR.edf: ${message}`);
   }
 
-  // DATALOG/<date>/<file> — walk every date folder, skip files already ingested unchanged.
   try {
     const dateDirs = (await client.listDirectory("/DATALOG")).filter(isDirectory);
     for (const dateDir of dateDirs) {

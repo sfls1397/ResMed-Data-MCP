@@ -16,7 +16,6 @@ interface DetailFile {
   sessionStart: string;
 }
 
-/** Night a DATALOG file belongs to. YYYYMMDD folders are the night. Year folders (older OSCAR copies) use the filename clock, and a time before noon belongs to the previous night. */
 export function nightDateFromPath(remotePath: string): string | null {
   const folder = remotePath.match(/DATALOG\/(\d{4})(\d{2})(\d{2})\//);
   if (folder) {
@@ -159,10 +158,6 @@ function addSeconds(start: string | null, seconds: number): string | null {
   return new Date(base + seconds * 1000).toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 
-/**
- * Rebuild one night atomically so MCP readers see either the old complete
- * rollup or the new complete rollup, never the intermediate DELETE state.
- */
 export function rebuildNightDetail(db: DatabaseSync, nightDate: string): number {
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -175,13 +170,9 @@ export function rebuildNightDetail(db: DatabaseSync, nightDate: string): number 
   }
 }
 
-/** Rebuild one night's detail while the caller owns the database transaction. */
 export function rebuildNightDetailInTransaction(db: DatabaseSync, nightDate: string): number {
   const compact = nightDate.replace(/-/g, "");
   const folderYear = Number(nightDate.slice(0, 4));
-  // Older OSCAR archives use DATALOG/YYYY. A session after midnight on
-  // January 1 belongs to the prior night's date, so include the next folder
-  // year before filtering with nightDateFromPath below.
   const nextFolderYear = Number.isFinite(folderYear) ? String(folderYear + 1) : "";
   const rows = db
     .prepare(
@@ -506,7 +497,6 @@ interface TherapyMinute {
   hypopnea: number;
 }
 
-/** Refresh the summary-derived setting fields against the already-derived minute rows. */
 export function refreshNightTherapy(db: DatabaseSync, nightDate: string): void {
   const minutes = db
     .prepare(
@@ -601,7 +591,6 @@ function writeNightTherapy(db: DatabaseSync, nightDate: string, minutes: Therapy
   );
 }
 
-/** Rebuild every night that has DATALOG files. Returns the number of sessions written. */
 export function rebuildAllDetailRollups(db: DatabaseSync, log: (msg: string) => void = () => {}): number {
   const nights = db
     .prepare(

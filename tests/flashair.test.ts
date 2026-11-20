@@ -3,7 +3,6 @@ import { decodeFatDateTime, FlashAirClient, FlashAirError } from "../src/flashai
 
 describe("decodeFatDateTime", () => {
   it("decodes real values observed from a FlashAir listing", () => {
-    // Captured from a live device: DATE=23862, TIME=26720.
     expect(decodeFatDateTime(23862, 26720)).toBe("2026-09-22T13:03:00");
   });
 
@@ -11,8 +10,7 @@ describe("decodeFatDateTime", () => {
     expect(decodeFatDateTime(0, 0)).toBeNull();
   });
 
-  it("returns null for an out-of-range month", () => {
-    // month bits = 0 is invalid per the FAT spec.
+  it("returns null for an out-of-range month, since month bits 0 is invalid per the FAT spec", () => {
     expect(decodeFatDateTime(0b0000000_0000_00001, 0)).toBeNull();
   });
 

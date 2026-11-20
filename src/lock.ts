@@ -34,11 +34,6 @@ export interface SyncLock {
   release(): void;
 }
 
-/**
- * Exclusive indexer.lock so an overlapping sync cycle (a slow FlashAir
- * download running past the next poll tick) never runs concurrently with
- * itself. Dead-PID takeover only; a live holder is never displaced.
- */
 export function createSyncLock(options: {
   lockFile: string;
   pid?: number;

@@ -37,7 +37,6 @@ describe("runIndexerDaemon", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "resmed-daemon-test-"));
     tempDirs.push(dir);
     const lockFile = path.join(dir, "indexer.lock");
-    // A live process (a manual backfill) holds the lock.
     fs.writeFileSync(lockFile, `${process.ppid}:${Date.now()}`);
     const db = openDatabase(":memory:");
     db.prepare(
