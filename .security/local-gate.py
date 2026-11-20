@@ -42,6 +42,8 @@ STANDARD = [
     ('Repository standard probes', ['python3', '.security/test_standard.py']),
 ]
 
+LINT = ('Types and strict lint (tsc, ESLint, Ruff, Pyright, imports, comments)', ['python3', '.security/lint.py', 'gate'])
+
 
 class GateError(Exception):
     pass
@@ -89,7 +91,14 @@ def steps(tree):
     for args in tests:
         if not isinstance(args, list) or not args or not all(isinstance(a, str) for a in args):
             raise GateError('local-gate.json tests must be argument lists')
-    return STANDARD + [('Tests: ' + ' '.join(args), args) for args in tests]
+    ordered = []
+    for args in tests:
+        ordered.append(('Tests: ' + ' '.join(args), args))
+        if args == ['npm', 'ci']:
+            ordered.append(LINT)
+    if LINT not in ordered:
+        ordered.insert(0, LINT)
+    return STANDARD + ordered
 
 
 def run_gate(sha, logdir, env):
@@ -152,6 +161,7 @@ def main():
         raise GateError('Use local-gate.py PR_NUMBER (from the reviewed PR checkout) or local-gate.py deploy')
     os.chdir(ROOT)
     env = dict(os.environ, PATH=str(Path.home() / '.local/bin') + os.pathsep + os.environ.get('PATH', ''))
+    env.pop('LOCAL_GATE_BASE', None)
     repo = gh(['repo', 'view', '--json', 'nameWithOwner'])['nameWithOwner']
     local = out(['git', 'rev-parse', 'HEAD'])
     number = None
@@ -162,6 +172,9 @@ def main():
             raise GateError('PR must be open, ready, and target main')
         if local != pr['headRefOid']:
             raise GateError('Check out the PR head first; the local commit is not the PR head')
+        base = subprocess.run(['git', 'merge-base', 'origin/main', local], cwd=ROOT, capture_output=True, text=True)
+        if not base.returncode and re.fullmatch(r'[0-9a-f]{40}', base.stdout.strip()):
+            env['LOCAL_GATE_BASE'] = base.stdout.strip()
     with tempfile.TemporaryDirectory(prefix='local-gate-logs-') as logs:
         try:
             results, *hashes = run_gate(local, Path(logs), env)
