@@ -43,7 +43,7 @@ Measured on main at 7011f2b with each tool first run at its widest setting, then
 | Pyright | 18 in standard mode, 337 in strict mode | 0 |
 | Imports | no rule widened | 0 |
 | Suppressions | none exist | 0 |
-| Comments | not run before | 261 (the baseline) |
+| Comments | not run before | 261 (the baseline, since cleaned to 0) |
 
 ## Rules dropped, and why
 
