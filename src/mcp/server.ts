@@ -41,6 +41,7 @@ export interface StartHttpServerOptions {
   host: string;
   port: number;
   token: string;
+  previousToken?: string;
   log?: (msg: string) => void;
 }
 
@@ -49,7 +50,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const log = options.log || ((msg: string) => console.error(msg));
 
   const httpServer = http.createServer((req, res) => {
-    if (!verifyAuthHeader(req.headers.authorization, options.token)) {
+    if (!verifyAuthHeader(req.headers.authorization, options.token, options.previousToken)) {
       res.writeHead(401, { "Content-Type": "application/json", "WWW-Authenticate": "Bearer" });
       res.end(JSON.stringify({ error: "Unauthorized: missing or invalid bearer token" }));
       return;
