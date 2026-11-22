@@ -170,6 +170,35 @@ class Standard(unittest.TestCase):
             with self.assertRaises(runner.GateError):
                 runner.steps(tree)
 
+    def test_gate_base_is_fetched_and_never_silently_missing(self):
+        runner = module('local_gate_base', 'local-gate.py')
+        quiet = ['git', '-c', 'user.name=probe', '-c', 'user.email=probe@users.noreply.github.com', '-c', 'commit.gpgsign=false']
+
+        def git(where, *args):
+            return subprocess.run(quiet + list(args), cwd=where, check=True, capture_output=True, text=True).stdout.strip()
+        with tempfile.TemporaryDirectory() as temp:
+            origin, work = Path(temp) / 'origin', Path(temp) / 'work'
+            origin.mkdir()
+            git(origin, 'init', '-q', '-b', 'main')
+            git(origin, 'commit', '-q', '--allow-empty', '-m', 'first')
+            git(Path(temp), 'clone', '-q', str(origin), str(work))
+            stale = git(work, 'rev-parse', 'origin/main')
+            git(origin, 'commit', '-q', '--allow-empty', '-m', 'second')
+            moved = git(origin, 'rev-parse', 'HEAD')
+            git(work, 'fetch', '-q', 'origin', 'main:refs/heads/side')
+            git(work, 'update-ref', 'refs/remotes/origin/main', stale)
+            git(work, 'checkout', '-q', '-b', 'pr', 'side')
+            self.assertEqual(runner.pr_base(git(work, 'rev-parse', 'HEAD'), work), moved)
+            git(work, 'remote', 'set-url', 'origin', str(Path(temp) / 'missing'))
+            with self.assertRaises(runner.GateError):
+                runner.pr_base(git(work, 'rev-parse', 'HEAD'), work)
+            git(work, 'remote', 'set-url', 'origin', str(origin))
+            git(origin, 'checkout', '-q', '--orphan', 'unrelated')
+            git(origin, 'commit', '-q', '--allow-empty', '-m', 'unrelated')
+            git(origin, 'branch', '-q', '-M', 'main')
+            with self.assertRaises(runner.GateError):
+                runner.pr_base(git(work, 'rev-parse', 'HEAD'), work)
+
 
 if __name__ == '__main__':
     unittest.main()
