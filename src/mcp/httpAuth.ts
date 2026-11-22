@@ -5,6 +5,7 @@ import { execFileSync as defaultExecFileSync } from "node:child_process";
 export const KEYCHAIN_SERVICE = "resmed-data-mcp-http";
 export const KEYCHAIN_ACCOUNT = "http-auth-token";
 export const ENV_TOKEN_VAR = "RESMED_DATA_MCP_TOKEN";
+export const PREVIOUS_TOKEN_ENV = ENV_TOKEN_VAR + "_PREVIOUS";
 
 type Exec = typeof defaultExecFileSync;
 
@@ -56,12 +57,22 @@ export function loadHttpTokenForCli(
   return loadOrCreateHttpAuthToken({ ...options, env: {} }).token;
 }
 
-export function verifyAuthHeader(headerValue: string | string[] | undefined, expectedToken: string): boolean {
-  if (typeof headerValue !== "string") return false;
-  const match = /^Bearer\s+(.+)$/i.exec(headerValue.trim());
+export function takePreviousHttpAuthToken(token: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const previous = env[PREVIOUS_TOKEN_ENV]?.trim();
+  delete env[PREVIOUS_TOKEN_ENV];
+  return token && env[ENV_TOKEN_VAR]?.trim() === token && previous && previous !== token ? previous : undefined;
+}
+
+export function verifyAuthHeader(header: unknown, token: string, previousToken?: string): boolean {
+  if (typeof header !== "string" || !token) return false;
+  const match = /^Bearer\s+(.+)$/i.exec(header.trim());
   if (!match) return false;
   const provided = Buffer.from(match[1], "utf8");
-  const expected = Buffer.from(expectedToken, "utf8");
-  if (provided.length !== expected.length) return false;
-  return crypto.timingSafeEqual(provided, expected);
+  const matches = (candidate: string): boolean => {
+    const expected = Buffer.from(candidate, "utf8");
+    return provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
+  };
+  const currentMatches = matches(token);
+  const previousMatches = previousToken ? matches(previousToken) : false;
+  return currentMatches || previousMatches;
 }

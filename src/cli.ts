@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { loadHttpTokenForCli, loadOrCreateHttpAuthToken } from "./mcp/httpAuth.js";
+import { loadHttpTokenForCli, loadOrCreateHttpAuthToken, takePreviousHttpAuthToken } from "./mcp/httpAuth.js";
 import { getCliCommand } from "./processMode.js";
 import { resolveConfig } from "./config.js";
 import { getAppDir, getLockFilePath } from "./paths.js";
@@ -55,7 +55,8 @@ async function main(): Promise<void> {
   console.error(`resmed-data-mcp serve v${packageVersion()} — DB: ${config.dbPath}`);
   openDatabase(config.dbPath).close();
   const db = openDatabaseReadOnly(config.dbPath);
-  await startHttpServer({ db, host: config.serverHost, port: config.serverPort, token: loadOrCreateHttpAuthToken().token });
+  const { token } = loadOrCreateHttpAuthToken();
+  await startHttpServer({ db, host: config.serverHost, port: config.serverPort, token, previousToken: takePreviousHttpAuthToken(token) });
 }
 
 main().catch((err) => {
