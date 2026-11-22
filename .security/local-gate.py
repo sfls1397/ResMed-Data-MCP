@@ -141,6 +141,18 @@ def record(repo, sha, number, results, hashes):
     return passed
 
 
+def pr_base(local, cwd=ROOT):
+    try:
+        out(['git', 'fetch', '--quiet', 'origin', 'main'], cwd)
+    except GateError:
+        raise GateError('Could not fetch origin/main, so the lint base is unknown; fix the remote or network and re-run')
+    found = subprocess.run(['git', 'merge-base', 'origin/main', local], cwd=cwd, capture_output=True, text=True)
+    base = found.stdout.strip()
+    if found.returncode or not re.fullmatch(r'[0-9a-f]{40}', base):
+        raise GateError('No merge base between origin/main and the PR head; lint cannot tell new findings from old ones')
+    return base
+
+
 def main():
     if len(sys.argv) != 2 or not re.fullmatch(r'[1-9][0-9]*|deploy', sys.argv[1]):
         raise GateError('Use local-gate.py PR_NUMBER (from the reviewed PR checkout) or local-gate.py deploy')
@@ -157,9 +169,7 @@ def main():
             raise GateError('PR must be open, ready, and target main')
         if local != pr['headRefOid']:
             raise GateError('Check out the PR head first; the local commit is not the PR head')
-        base = subprocess.run(['git', 'merge-base', 'origin/main', local], cwd=ROOT, capture_output=True, text=True)
-        if not base.returncode and re.fullmatch(r'[0-9a-f]{40}', base.stdout.strip()):
-            env['LOCAL_GATE_BASE'] = base.stdout.strip()
+        env['LOCAL_GATE_BASE'] = pr_base(local)
     with tempfile.TemporaryDirectory(prefix='local-gate-logs-') as logs:
         try:
             results, *hashes = run_gate(local, Path(logs), env)
