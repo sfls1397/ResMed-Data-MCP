@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 def module(name, filename):
@@ -169,6 +170,21 @@ class Standard(unittest.TestCase):
             (tree / '.security/local-gate.json').write_text('{"tests": ["npm test"]}')
             with self.assertRaises(runner.GateError):
                 runner.steps(tree)
+
+    def test_gate_hooks_path_reports_setup_for_unset_and_wrong_values(self):
+        runner = module('local_gate_hooks', 'local-gate.py')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            env = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', HOME=temp, XDG_CONFIG_HOME=temp)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True, env=env)
+            with mock.patch.dict(os.environ, env, clear=True):
+                for value in [None, 'other']:
+                    if value:
+                        subprocess.run(['git', 'config', 'core.hooksPath', value], cwd=root, check=True, env=env)
+                    with self.assertRaisesRegex(runner.GateError, 'git config core.hooksPath .githooks'):
+                        runner.check_hooks_path(root)
+                subprocess.run(['git', 'config', 'core.hooksPath', '.githooks'], cwd=root, check=True, env=env)
+                runner.check_hooks_path(root)
 
     def test_gate_base_is_fetched_and_never_silently_missing(self):
         runner = module('local_gate_base', 'local-gate.py')
