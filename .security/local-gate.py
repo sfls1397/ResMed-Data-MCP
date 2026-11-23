@@ -86,13 +86,20 @@ def steps(tree):
     return STANDARD + ordered
 
 
+def check_hooks_path(tree):
+    result = subprocess.run(['git', 'config', '--get', 'core.hooksPath'], cwd=tree, capture_output=True, text=True)
+    if result.returncode == 1 or (result.returncode == 0 and result.stdout.strip() != '.githooks'):
+        raise GateError('core.hooksPath must be .githooks; run git config core.hooksPath .githooks in the clone')
+    if result.returncode:
+        raise GateError('Could not read core.hooksPath; check Git configuration and retry')
+
+
 def run_gate(sha, logdir, env):
     results = []
     tree = Path(tempfile.mkdtemp(prefix='local-gate-')) / 'tree'
     out(['git', 'worktree', 'add', '--detach', '--quiet', str(tree), sha])
     try:
-        if out(['git', 'config', 'core.hooksPath'], tree) != '.githooks':
-            raise GateError('core.hooksPath must be .githooks')
+        check_hooks_path(tree)
         for hook in ['pre-commit', 'commit-msg', 'pre-push']:
             if not os.access(tree / '.githooks' / hook, os.X_OK):
                 raise GateError('Hook missing or not executable: ' + hook)
